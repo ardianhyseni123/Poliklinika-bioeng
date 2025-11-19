@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="sq">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bioeng - Sistemi Laboratorik</title>
+
+<style>
+/* Zvogëlim super i rreshtave të pagesave */
+.payment-list {
+    margin-top: 0 !important;
+    padding-left: 7px !important;
+}
+
+.payment-list li {
+    margin: 1px 0 !important;          
+    padding: 0 !important;             
+    line-height: 15px !important;      
+    font-size: 13px !important;        
+    list-style-position: inside !important; 
+}
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+body {font-family:'Times New Roman', Times, serif; background:#f5f7fa; margin:0; padding:20px; color:#333;}
+h1,h2,h3 {margin:0; color:#b30000;}
+h2 {margin-top:10px;}
+h3 {margin-top:20px; padding-bottom:5px; border-bottom:2px solid #b30000;}
+.logo {width:30px; height:30px; background:#b30000; border-radius:50%; display:inline-block; margin-right:10px;}
+.card {background:white; padding:20px; border-radius:12px; box-shadow:0 2px 6px rgba(0,0,0,0.1);}
+table {width:100%; border-collapse:collapse; margin-top:10px; font-size:14px;}
+th, td {border:1px solid #ccc; padding:8px; text-align:center;}
+th {background:linear-gradient(to right,#fce4e4,#fff);}
+.report-section {margin-top:15px;}
+.final-signs {display:flex; justify-content:space-between; margin-top:60px; width:100%;}
+.final-signs div {width:45%;}
+.final-signs div:first-child {text-align:left;}   
+.final-signs div:last-child {text-align:right;}  
+#reportContainer {display:none; background:white; padding:20px; border-radius:12px;}
+input, select {width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin-top:5px;}
+button {margin-top:10px; padding:10px; background:#b30000; color:white; border:none; border-radius:8px; cursor:pointer;}
+button:hover {background:#d90000;}
+</style>
+</head>
+<body>
+
+<h1 style="text-align:center;"><img src="logo.png.png" alt="" width="35" height="35">POLIKLINIKA BIOENG</h1>
+<p style="text-align:center; font-size:14px;">Adresa: Rr. Sadulla Brestovci nr. 100, Gjilan</p>email: laboratoribioeng@gmail.com
+
+<!-- Login -->
+<div class="card" id="loginCard">
+  <h2>Login</h2>
+  <label>Email<input type="email" id="loginEmail" placeholder="shembull@bioeng.com"></label>
+  <label>Password<input type="password" id="loginPassword"></label>
+  <button id="loginBtn">Kyçu</button>
+</div>
+
+<!-- Sistemi -->
+<div id="system" style="display:none;">
+  <div class="card">
+    <h2>Regjistro Pacient</h2>
+    <label>Emri<input id="patientName"></label>
+    <label>Mbiemri<input id="patientSurname"></label>
+    <label>Adresa<input id="patientAddress"></label>
+    <label>Gjinia
+      <select id="patientGender">
+        <option>Femer</option>
+        <option>Mashkull</option>
+      </select>
+    </label>
+    <label>Datëlindja (DD-MM-YYYY)<input id="patientDOB" placeholder="12-05-1990"></label>
+    <button id="savePatient">Ruaj Pacientin</button>
+
+    <h3>Lista Pacientëve</h3>
+    <input id="searchPatient" placeholder="Kërko pacient...">
+    <select id="patientsList" size="6" style="width:100%; margin-top:5px;"></select>
+    <button id="deletePatient" style="margin-top:5px; background:#555;">Fshij Pacientin</button>
+
+    <h3>Raportet e ruajtura</h3>
+    <select id="reportDates" size="4" style="width:100%; margin-top:5px;"></select>
+  </div>
+
+  <div class="card">
+    <h2>Zgjidh Analizat për Pacientin</h2>
+    <label>Lloji i Analizës
+      <select id="analysisType">
+        <option value="Biokimi">Biokimi</option>
+        <option value="Hematologji">Hematologji</option>
+        <option value="Hormonale">Hormonale</option>
+        <option value="Urine">Analizat Urinare</option>
+        <option value="Reumatologjike">Reumatologjike</option>
+        <option value="Tumor Marker">Tumor Marker</option>
+        <option value="Kuagulogrami">Kuagulogrami</option>
+        <option value="Virusale">Virusale</option>
+        <option value="Analizat specifike te urines">Analizat specifike te urines</option>
+        <option value="Analizat specifike">Analizat specifike</option>
+      </select>
+    </label>
+    <label>Emri Analizës
+      <select id="analysisName"></select>
+    </label>
+    <button id="addAnalysis">Shto Analizë për Pacientin</button>
+
+    <h3>Analizat e Zgjedhura për Vlerësim</h3>
+    <table class="report-table">
+      <thead>
+        <tr>
+          <th>Lloji</th>
+          <th>Analiza</th>
+          <th>Vlera</th>
+          <th>Njësia matëse</th>
+          <th>Fshij</th>
+        </tr>
+      </thead>
+      <tbody id="analysisList"></tbody>
+    </table>
+  </div>
+
+  <div class="card" style="margin-top:20px;">
+    <h2>Raporti Profesional</h2>
+    <button id="generateReport">Gjenero Raport</button>
+    <button id="printReport">Printo</button>
+    <button id="downloadPDF">Shkarko PDF</button>
+
+    <!-- Butonat e veçantë për raportin me AI (vetëm për ju) -->
+    <button id="generateAIReport" style="background:#0044aa; color:white; margin-left:10px;">
+      Raport me komentim (AI)
+    </button>
+    <button id="printAIReport" style="background:#002266; color:white; margin-left:5px; display:none;">
+      Printo raportin AI
+    </button>
+  </div>
+</div>
+
+<div id="reportContainer"></div>
+<div id="aiReportContainer" style="display:none; background:white; padding:20px; border-radius:12px; margin-top:20px;"></div>
+
+<script>
+// LOGIN
+const USER_EMAIL = "admin@bioeng.com";
+const USER_PASS  = "Bioeng2025";
+
+document.getElementById("loginBtn").addEventListener("click", () => {
+  const e = document.getElementById("loginEmail").value;
+  const p = document.getElementById("loginPassword").value;
+  if (e === USER_EMAIL && p === USER_PASS) {
+    document.getElementById("loginCard").style.display = "none";
+    document.getElementById("system").style.display    = "block";
+  } else {
+    alert("Email ose password i gabuar!");
+  }
+});
+
+// ANALIZAT
+const analysesByType = {
+  "Biokimi": {
+    "Glukoza esull (mmol/L)":"3.3-6.1",
+    "Urea (mmol/L)":"1.7-8.3",
+    "Kreatinina M (µmol/L)":"70-108",
+    "Kreatinina F (µmol/L)":"44-88",
+    "Kolesteroli Total (mmol/L)":"5.0-6.1",
+    "Trigliceridet (mmol/L)":"1.7-2.2",
+    "ALT (U/L)":"<40",
+    "AST (U/L)":"<40",
+    "Bilirubina Total (µmol/L)":"5-21",
+    "Bilirubina Direkte (µmol/L)":"1-5",
+    "CRP-Proteina C Reaktive (mg/L)":"<6.0",
+    "Proteinat totale (g/L)":"65-82",
+    "Albuminat (g/L)":"35-50",
+    "Acidi urik (mg/dL)":"100-350",
+    "HDL-Kolesteroli (mmol/L)":"0.91-1.60",
+    "LDL-Kolesteroli (mmol/L)":"2.7-4.1",
+    "VLDL-Kolesteroli (mmol/l)":"<1.04",
+    "LDH-Laktodehidrogjenaza (U/L)":"120-320",
+    "Amiliaza-Serum (U/L)":"12-100",
+    "ALP-Fosfataza alkaline (U/L)":"54-369",
+    "GGT-Gama glutamil transpeptidaza (U/L)":"<38.0",
+    "CK-Kreatinfosfokinaza (U/L)":"34-170",
+    "CK-MB-Kreatinfosfokinaza MB (U/L)":"<24.0",
+    "Hekuri-Fe (umol/l)":"6.6-26.0",
+    "Natriumi-Na (mmol/L)":"135-150",
+    "Kaliumi-K (mmol/L)":"3.5-5.3",
+    "Klori-Cl (mmol/L)":"97.0-107.0",
+    "Kalciumi-Ca (mmol/L)":"2.1-2.5",
+    "Fosfori-P (mmol/L)":"0.81-1.45",
+    "Magneziumi-Mg (mmol/L)":"0.63-1.05",
+    "Zingu-Zn (umol/l)":"7.0-22.9"
+  },
+
+  "Hematologji": {
+    "SE - Sedimentacioni i eritrociteve (mm/h)": "5 - 15",
+    "Hemoglobina M (g/dL)": "13.5 - 17.5",
+    "Hemoglobina F (g/dL)": "12.0 - 16.0",
+    "Hematokriti (%)": "40 - 54",
+    "Eritrocitet (RBC) (x10⁶/µL)": "4.5 - 6.0",
+    "Leukocitet (WBC) (x10³/µL)": "4.0 - 10.0",
+    "Trombocitet (PLT) (x10³/µL)": "150 - 400",
+    "MCV (Mesatarja e vëllimit të eritrociteve) (fL)": "80 - 100",
+    "MCH (Mesatarja e përmbajtjes së Hb për eritrocit) (pg)": "27 - 33",
+    "MCHC (Përqendrimi mesatar i Hb në eritrocit) (g/dL)": "32 - 36",
+    "RDW (Variacioni i madhësisë së eritrociteve) (%)": "11.5 - 14.5",
+    "Neutrofile (%)": "40 - 75",
+    "Limfocite (%)": "20 - 45",
+    "Monocite (%)": "2 - 10",
+    "Eozinofile (%)": "0 - 6",
+    "Bazofile (%)": "0 - 1",
+    "Neutrofile absolute (x10³/µL)": "1.8 - 7.5",
+    "Limfocite absolute (x10³/µL)": "1.0 - 4.5",
+    "Monocite absolute (x10³/µL)": "0.1 - 1.0",
+    "Eozinofile absolute (x10³/µL)": "0.0 - 0.6",
+    "Bazofile absolute (x10³/µL)": "0.0 - 0.1",
+    "Retikulocitet (%)": "0.5 - 2.0",
+    "Hemoglobina retikulocitare (pg)": "28 - 35",
+    "ESR (Erythrocyte Sedimentation Rate) (mm/h)": "5 - 15",
+    "MPV (Mesatarja e vëllimit të trombociteve) (fL)": "7.0 - 11.0",
+    "PDW (Shpërndarja e vëllimit të trombociteve) (%)": "10 - 18",
+    "PCT (Përqindja e masës së trombociteve) (%)": "0.15 - 0.50",
+    "NRBC (Eritrocite bërthamore) (x10³/µL)": "0",
+    "NRBC (%)": "0",
+    "Leukocitet totale (x10³/µL)": "4.0 - 10.0",
+    "Hemoglobina totale (g/L)": "120 - 175",
+    "Hematokriti korigjuar (%)": "38 - 52",
+    "Indeksi i ngopjes së hemoglobinës (SI) (%)": "95 - 105",
+    "RBC Indeksi morfologjik": "Normocitik, normokromik",
+    "Shënime hematologjike": "Vlerat varen nga mosha, gjinia dhe gjendja fiziologjike"
+  },
+
+  "Hormonale": {
+    "TSH (µIU/mL)": "0.3 - 4.5",
+    "FT4 - Free T4 (ng/dL)": "0.9 - 1.75",
+    "T4 - Total (µg/dL)": "4.5 - 12.0",
+    "T3 - Total (ng/dL)": "80 - 200",
+    "FT3 - Free T3 (pg/mL)": "2.0 - 4.4",
+    "FSH (IU/L)": "Femra: 3 - 20 | Meshkuj: 1.5 - 12.4",
+    "LH (IU/L)": "Femra: 2 - 15 | Meshkuj: 1.5 - 9.3",
+    "Prolaktina (ng/mL)": "Femra: 4.8 - 23.3 | Meshkuj: 4.0 - 15.2",
+    "Estradiol (pg/mL)": "Femra: 30 - 400 | Meshkuj: 10 - 50",
+    "Progesteroni (ng/mL)": "Faza luteale: 5 - 20 | Faza folikulare: < 1",
+    "Testosteroni Total (ng/mL)": "Meshkuj: 2.5 - 8.4 | Femra: 0.1 - 0.8",
+    "Testosteroni i Lirë (pg/mL)": "Meshkuj: 50 - 210 | Femra: 1.0 - 8.5",
+    "DHEA-S (µg/dL)": "Femra: 35 - 430 | Meshkuj: 80 - 560",
+    "SHBG (nmol/L)": "Meshkuj: 10 - 57 | Femra: 18 - 144",
+    "17-OH Progesteroni (ng/mL)": "0.2 - 1.3",
+    "Androstenedione (ng/mL)": "0.3 - 3.5",
+    "Kortizoli Paradite (nmol/L)": "200–340",
+"Kortizoli Pasdite (nmol/L)": "130–420",
+    "Aldosteroni (ng/dL)": "4 - 31",
+    "Renina (µIU/mL)": "2.8 - 39.9",
+    "ACTH (pg/mL)": "10 - 60",
+    "Insulina (µIU/mL)": "2 - 25",
+    "C-Peptidi (ng/mL)": "0.8 - 3.5",
+    "hCG (IU/L)": "Jo shtatzënë: < 5 | Shtatzënë: > 25",
+    "AMH (Anti-Müllerian Hormone) (ng/mL)": "Femra: 1.0 - 10.0 | Meshkuj: 2.0 - 5.5",
+    "PTH (Parathyroid Hormone) (pg/mL)": "15 - 65",
+    "Kalicitonina (pg/mL)": "Femra: < 5 | Meshkuj: < 8",
+    "Leptina (ng/mL)": "Femra: 3 - 100 | Meshkuj: 1 - 30",
+    "Adiponektina (µg/mL)": "3 - 30",
+    "Somatotropina (GH) (ng/mL)": "0.01 - 3.0",
+    "IGF-1 (Insulin-like Growth Factor 1) (ng/mL)": "100 - 300",
+    "Progestina (ng/mL)": "0.1 - 25.0",
+    "Estroni (pg/mL)": "Femra: 15 - 350 | Meshkuj: 10 - 60",
+    "Tiroglobulina (ng/mL)": "< 55",
+    "Globulina lidhëse e tiroideve (TBG) (µg/mL)": "1.3 - 2.0",
+    "Prostaglandina E2 (pg/mL)": "50 - 150",
+    "Vasopresina (pg/mL)": "0.5 - 5.0",
+    "Oxytocina (pg/mL)": "1 - 10"
+  },
+
+  "Urine": {
+    "Pamja": "Normale (E kthjellët, pa turbullirë)",
+    "Ngjyra": "Verdhë e lehtë deri në verdhë të artë",
+    "Aroma": "Karakteristike, jo e fortë",
+    "pH": "4.5 - 8.0",
+    "Dendësia specifike": "1.005 - 1.030",
+    "Proteina (Proteinuria)": "Negativ",
+    "Glukoza (Glikozuria)": "Negativ",
+    "Ketone": "Negativ",
+    "Bilirubina": "Negativ",
+    "Urobilinogjeni (mg/dL)": "0.1 - 1.0",
+    "Hemoglobina (Gjaku në urinë)": "Negativ",
+    "Nitritet": "Negativ",
+    "Leukocitet (Esteraza leukocitare)": "Negativ",
+    "Cilindrat hyalinë": "0 - 1 / fushë mikroskopike",
+    "Cilindrat granularë": "0 / fushë mikroskopike",
+    "Eritrocite (RBC)": "0 - 2 / fushë mikroskopike",
+    "Leukocite (WBC)": "0 - 5 / fushë mikroskopike",
+    "Epiteli skuamoz": "0 - 5 / fushë mikroskopike",
+    "Epiteli cilindrik": "0 - 1 / fushë mikroskopike",
+    "Kristale": "Të rralla ose mungojnë",
+    "Baktere": "Negativ (të pakta ose mungojnë)",
+    "Mikozë / kërpudha": "Negativ",
+    "Mukoza": "Të rralla",
+    "Amorf fosfat / urat": "Të rralla",
+    "Komente": "Mostra duhet të jetë e freskët; ndryshimet ndikohen nga dieta, ilaçet dhe hidrimi"
+  },
+
+  "Reumatologjike": {
+    "Faktori Reumatoid (RF) (IU/mL)": "0 - 14",
+    "ANA (Antitrupa antinuklearë)": "Negativ",
+    "Anti-CCP (Antitrupa kundër peptidit ciklik citrullinë) (U/mL)": "< 20",
+    "CRP (C-reaktiv proteinë) (mg/L)": "0 - 5",
+    "ASO (Antistreptolizin O) (IU/mL)": "0 - 200",
+    "Komplementi C3 (g/L)": "0.9 - 1.8",
+    "Komplementi C4 (g/L)": "0.1 - 0.4",
+    "Anti-dsDNA (IU/mL)": "< 30 (Negativ)",
+    "Anti-ENA (Antitrupa kundër antigjeneve të nxjerrshme bërthamore)": "Negativ",
+    "Anti-SM (Antitrupa ndaj Smith proteinës)": "Negativ",
+    "Anti-RNP (U/mL)": "< 20",
+    "Anti-SSA (Ro) (U/mL)": "< 20",
+    "Anti-SSB (La) (U/mL)": "< 20",
+    "Anti-Scl-70 (U/mL)": "< 20",
+    "Anti-centromere (U/mL)": "< 20",
+    "Anti-MPO (Myeloperoxidase) (U/mL)": "< 20",
+    "Anti-PR3 (Proteinase 3) (U/mL)": "< 20",
+    "Reuma Test (latex)": "Negativ",
+    "Imunokomplekset cirkuluese (CIC)": "0 - 120 µg Eq/mL",
+    "HLA-B27": "Negativ",
+    "Antikardiolipin IgG (GPL U/mL)": "< 15",
+    "Antikardiolipin IgM (MPL U/mL)": "< 12",
+    "Beta-2 glikoproteina IgG (SGU)": "< 20",
+    "Beta-2 glikoproteina IgM (SMU)": "< 20",
+    "Proteina totale (g/L)": "60 - 80",
+    "Albumina (g/L)": "35 - 50",
+    "Globulinat (g/L)": "20 - 35",
+    "Raporti A/G": "1.2 - 2.0",
+    "Vlerësim shtesë": "Interpretimi varet nga simptomat klinike dhe historia mjekësore"
+  },
+
+  "Tumor Marker": {
+    "CA 125 (U/mL)": "0 - 35",
+    "CA 19-9 (U/mL)": "0 - 37",
+    "AFP (Alfa-fetoproteina) (ng/mL)": "0 - 10",
+    "CEA (Carcinoembryonic Antigen) (ng/mL)": "0 - 5",
+    "CA 15-3 (U/mL)": "0 - 30",
+    "CA 72-4 (U/mL)": "0 - 6.9",
+    "PSA Total (ng/mL)": "0 - 4",
+    "PSA i Lirë (ng/mL)": "0 - 1",
+    "Raporti PSA i Lirë / Total (%)": "> 25%",
+    "NSE (Neuron Specific Enolase) (ng/mL)": "0 - 16.3",
+    "CYFRA 21-1 (ng/mL)": "0 - 3.3",
+    "ProGRP (Pro-Gastrin-Releasing Peptide) (pg/mL)": "< 80",
+    "HE4 (Human Epididymis Protein 4) (pmol/L)": "< 70",
+    "β-hCG (Beta Human Chorionic Gonadotropin) (mIU/mL)": "< 5",
+    "SCC (Squamous Cell Carcinoma Antigen) (ng/mL)": "0 - 2.5",
+    "Calcitonina (pg/mL)": "0 - 10",
+    "Chromogranina A (ng/mL)": "< 100",
+    "CA 50 (U/mL)": "0 - 25",
+    "CA 54/61 (U/mL)": "0 - 25",
+    "CA 549 (U/mL)": "0 - 12",
+    "CA 242 (U/mL)": "0 - 20",
+    "PIVKA-II (mAU/mL)": "0 - 40",
+    "TG (Tiroglobulina) (ng/mL)": "1.6 - 59.9",
+    "Anti-TG (IU/mL)": "< 115",
+    "Anti-TPO (IU/mL)": "< 34",
+    "LDH (Laktat Dehidrogjenaza) (U/L)": "135 - 225",
+    "Ferritina (ng/mL)": "M: 30 - 400 / F: 15 - 150",
+    "Beta-2 Mikroglobulina (mg/L)": "0.8 - 2.2",
+    "Komente": "Vlerat mund të ndryshojnë sipas metodës analitike dhe aparatit të përdorur"
+  },
+
+  "Kuagulogrami": {
+    "Koha e Gjakderdhjes (min.)":"1-3",
+    "Koha e Koagulimit (min)":"5-10",
+    "D-Dimeri (ug/mL)":"<500",
+    "Fibrinogjeni (g/L)":"2-4",
+    "PT (sec.)":"10-15",
+    "aPTT (sec.)":"24-35",
+    "TT (sec.)":"10-14",
+    "INR pa terapi (sec.)":"2.02-2.82",
+    "INR me terapi (sec.)":"0.9-1.2",
+    "Quick% (ug/mL)":"70-120"
+  },
+
+  "Virusale": {
+    "HBsAg (Antigjeni i sipërfaqes së Hepatitit B) (COI)": "Negativ (< 1.0)",
+    "HBsAg Kuantitativ (IU/mL)": "< 0.05 Negativ, ≥ 1.0 Pozitiv",
+    "Anti-HBs (Antitrupa ndaj HBsAg) (mIU/mL)": "< 10 Jo mbrojtës, ≥ 10 Mbrojtës",
+    "HBeAg (Antigjeni E i Hepatitit B)": "Negativ",
+    "Anti-HBe (Antitrupa ndaj HBeAg)": "Negativ",
+    "Anti-HBc Total (Antitrupa total ndaj HBcAg)": "Negativ",
+    "Anti-HBc IgM (Antitrupa IgM ndaj HBcAg)": "Negativ",
+    "HBV DNA (Kopje/mL)": "Jo e detektueshme",
+    "HCV (Antitrupa ndaj Hepatitit C) (COI)": "Negativ (< 1.0)",
+    "HCV RNA (IU/mL)": "Jo e detektueshme",
+    "HIV Ag/Ab Kombinuar (COI)": "< 0.9 Negativ, ≥ 1.0 Pozitiv",
+    "HIV 1 RNA (Kopje/mL)": "Jo e detektueshme",
+    "HIV 2 RNA (Kopje/mL)": "Jo e detektueshme",
+    "Anti-HAV Total (Antitrupa ndaj Hepatitit A)": "Negativ",
+    "Anti-HAV IgM": "Negativ",
+    "Anti-HEV (Antitrupa ndaj Hepatitit E)": "Negativ",
+    "Anti-HEV IgM": "Negativ",
+    "EBV VCA IgM (Epstein-Barr Virus)": "Negativ",
+    "EBV VCA IgG": "Negativ ose Pozitiv (sipas infeksionit të kaluar)",
+    "EBV EBNA IgG": "Negativ ose Pozitiv (sipas fazës kronike)",
+    "CMV IgM (Citomegalovirus)": "Negativ",
+    "CMV IgG": "Negativ ose Pozitiv (Imunitet i kaluar)",
+    "HSV 1 IgM (Herpes Simplex Virus Tip 1)": "Negativ",
+    "HSV 1 IgG": "Negativ ose Pozitiv (Infeksion i kaluar)",
+    "HSV 2 IgM (Herpes Simplex Virus Tip 2)": "Negativ",
+    "HSV 2 IgG": "Negativ ose Pozitiv (Infeksion i kaluar)",
+    "VZV IgM (Varicella Zoster Virus)": "Negativ",
+    "VZV IgG": "Negativ ose Pozitiv (Imunitet i kaluar)",
+    "Rubeola (Fruthi gjerman) IgM": "Negativ",
+    "Rubeola IgG": "Negativ ose Pozitiv (Imunitet)",
+    "Rubeola Kuantitativ (IU/mL)": "< 10 Jo imunitar, ≥ 10 Imunitar",
+    "Toxoplasma IgM": "Negativ",
+    "Toxoplasma IgG": "Negativ ose Pozitiv (sipas infeksionit të kaluar)",
+    "Parvovirus B19 IgM": "Negativ",
+    "Parvovirus B19 IgG": "Negativ ose Pozitiv",
+    "Treponema pallidum (Sifilis) – TPHA": "Negativ",
+    "VDRL (Sifilis test kualitativ)": "Negativ",
+    "COVID-19 IgM": "Negativ",
+    "COVID-19 IgG": "Negativ ose Pozitiv (pas infeksionit ose vaksinimit)",
+    "SARS-CoV-2 Antigjen (Test Ag)": "Negativ",
+    "HBV/HCV/HIV Kombinuar (Screening)": "Negativ",
+    "Interpretim": "Vlerat referente vlejnë për individë të shëndetshëm; rezultatet pozitive duhet të konfirmohen me testime shtesë (PCR ose WB)"
+  },
+
+  "Analizat specifike te urines": {
+    "Klirensi i kreatinines (ml/min)": "95.0 - 160.0",
+    "Prova e Biuretit - Proteinurina 24h (mg/24h)": "< 150.0",
+    "Bence-Jones Protein (COI)": "Negativ",
+    "Diureza (ml/24h)": "> 1500",
+    "Kreatinina urinare 24h (mg/24h)": "500 - 2000",
+    "Glukoza urinare 24h (mg/24h)": "Negativ",
+    "Urea urinare 24h (g/24h)": "12 - 20",
+    "Sodium urinare 24h (mmol/24h)": "40 - 220",
+    "Potassium urinare 24h (mmol/24h)": "25 - 125",
+    "Calcium urinare 24h (mg/24h)": "100 - 300",
+    "Phosphorus urinare 24h (mg/24h)": "400 - 1300",
+    "Uric Acid urinare 24h (mg/24h)": "250 - 750",
+    "Protein/Creatinine Ratio (mg/g)": "< 0.2",
+    "Microalbuminuria (mg/24h)": "< 30",
+    "Beta-2 Mikroglobulina (mg/L)": "0.05 - 0.3",
+    "Osmolaliteti urinës (mOsm/kg)": "300 - 900",
+    "Specific Gravity / Densiteti": "1.005 - 1.030",
+    "pH": "4.5 - 8.0",
+    "Komentet": "Vlerat varen nga hidrimi, dieta dhe kohëzgjatja e mbledhjes së urinës 24h"
+  },
+
+  "Analizat specifike": {
+    "Homocisteina (µmol/L)": "5 - 15",
+    "Vitaminë B12 (pg/mL)": "200 - 900",
+    "Folat (ng/mL)": "3 - 16",
+    "Vitaminë D (25-OH) (ng/mL)": "30 - 100",
+    "Ferritina (ng/mL)": "Meshkuj: 30-400 | Femra: 15-150",
+    "Transferrina (mg/dL)": "200 - 360",
+    "TIBC (Total Iron Binding Capacity) (µg/dL)": "240 - 450",
+    "Hemoglobina A1c (%)": "4.0 - 5.6"
+  }
+};
+
+// INDEXEDDB
+let db;
+const request = indexedDB.open("LabDB", 1);
+request.onupgradeneeded = function(e){
+  db = e.target.result;
+  if (!db.objectStoreNames.contains("patients")) {
+    db.createObjectStore("patients",{keyPath:"id",autoIncrement:true});
+  }
+};
+request.onsuccess = function(e){
+  db = e.target.result;
+  renderPatients();
+};
+request.onerror = function(){
+  alert("IndexedDB Error");
+};
+
+// DOM
+const patientName   = document.getElementById('patientName');
+const patientSurname= document.getElementById('patientSurname');
+const patientAddress= document.getElementById('patientAddress');
+const patientGender = document.getElementById('patientGender');
+const patientDOB    = document.getElementById('patientDOB');
+const savePatient   = document.getElementById('savePatient');
+const searchPatient = document.getElementById('searchPatient');
+const patientsList  = document.getElementById('patientsList');
+const deletePatient = document.getElementById('deletePatient');
+const reportDates   = document.getElementById('reportDates');
+let selectedPatientId  = null;
+let selectedReportDate = null;
+
+const analysisType   = document.getElementById('analysisType');
+const analysisName   = document.getElementById('analysisName');
+const addAnalysis    = document.getElementById('addAnalysis');
+const analysisList   = document.getElementById('analysisList');
+const generateReport = document.getElementById('generateReport');
+const printReport    = document.getElementById('printReport');
+const downloadPDF    = document.getElementById('downloadPDF');
+const reportContainer= document.getElementById('reportContainer');
+
+// elementet e reja për AI
+const generateAIReportBtn = document.getElementById('generateAIReport');
+const printAIReportBtn    = document.getElementById('printAIReport');
+const aiReportContainer   = document.getElementById('aiReportContainer');
+
+if (generateAIReportBtn) {
+  generateAIReportBtn.addEventListener('click', generateAIReport);
+}
+if (printAIReportBtn) {
+  printAIReportBtn.addEventListener('click', printAIReport);
+}
+
+function buildAIInputFromReport(patient, report) {
+  let text = `Pacient: ${patient.name} ${patient.surname}\n` +
+             `Gjinia: ${patient.gender}\n` +
+             `Datelindja: ${patient.dob}\n` +
+             `Data e raportit: ${report.date}\n\n` +
+             `Analizat laboratorike:\n`;
+
+  report.analyses.forEach(a => {
+    text += `- ${a.name}: ${a.value || "(pa shënuar vlerë)"} (Referencë: ${a.reference})\n`;
+    });
+
+  return text;
+}
+
+// PRINT i raportit AI
+function printAIReport() {
+  if (!aiReportContainer || !aiReportContainer.innerHTML.trim()) {
+    alert("Nuk ka raport AI për të printuar.");
+    return;
+  }
+  const printWindow = window.open('', '', 'width=900,height=700');
+  printWindow.document.write('<html><head><title>Raport AI</title>');
+  printWindow.document.write('<style>body{font-family:Times New Roman, serif; margin:20px;} h1,h2,h3{color:#0044aa;}</style>');
+  printWindow.document.write('</head><body>');
+  printWindow.document.write(aiReportContainer.innerHTML);
+  printWindow.document.write('</body></html>');
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+}
+
+async function generateAIReport() {
+  if (!selectedPatientId || !selectedReportDate) {
+    alert("Zgjidh pacientin dhe datën e raportit para komentimit me AI.");
+    return;
+  }
+
+  const store = db.transaction("patients","readonly").objectStore("patients");
+  store.get(selectedPatientId).onsuccess = async function(e) {
+    const p = e.target.result;
+    const report = p.reports.find(r => r.date === selectedReportDate);
+
+    if (!report || report.analyses.length === 0) {
+      alert("Nuk ka analiza në këtë raport.");
+      return;
+    }
+
+    const labText = buildAIInputFromReport(p, report);
+
+    const prompt = `
+Ti je mjek specialist i laboratorit klinik.
+Analizo analizat e pacientit dhe shkruaj një raport profesional në gjuhën shqipe.
+
+1) KOMENTIMI PROFESIONAL
+- Trego cilat vlera janë të rritura, ulura ose normale.
+- Jep shpjegime mjekësore.
+
+2) DIAGNOZA E MUNDSHME (ICD-10)
+- Jep disa diagnoza të mundshme.
+
+3) TERAPIA E REKOMANDUAR
+- Jep rekomandime të përgjithshme terapeutike.
+
+4) REKOMANDIME SHTESË
+- Analiza shtesë
+- Specialistë për konsultim
+
+Analizat e pacientit:
+
+${labText}
+`;
+
+    try {
+      const response = await fetch("http://localhost:11434/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "llama3",
+          prompt: prompt,
+          stream: false
+        })
+      });
+
+      if (!response.ok) {
+        alert("Gabim: OLLAMA nuk u përgjigj.");
+        return;
+      }
+
+      const data  = await response.json();
+      let aiText  = data.response.trim();
+
+      aiReportContainer.innerHTML = `
+        <h2 style="text-align:center; color:#0044aa;">Raport me komentim nga AI (Ollama LLaMA-3)</h2>
+        <p><strong>Pacienti:</strong> ${p.name} ${p.surname}</p>
+        <p><strong>Data e raportit:</strong> ${selectedReportDate}</p>
+        <hr>
+        <pre style="white-space:pre-wrap; font-size:15px;">${aiText}</pre>
+      `;
+
+      aiReportContainer.style.display   = "block";
+      printAIReportBtn.style.display    = "inline-block";
+
+    } catch (err) {
+      console.error(err);
+      alert("Gabim komunikimi me OLLAMA.");
+    }
+  };
+}
+
+// Popullo Analizat
+function populateAnalyses(){
+  analysisName.innerHTML = "";
+  const type = analysisType.value;
+  Object.keys(analysesByType[type]).forEach(a => {
+    const opt = document.createElement('option');
+    opt.value = a;
+    opt.textContent = a;
+    analysisName.appendChild(opt);
+  });
+}
+analysisType.addEventListener('change', populateAnalyses);
+populateAnalyses();
+
+// Ruaj pacient
+savePatient.addEventListener('click', () => {
+  const name    = patientName.value.trim();
+  const surname = patientSurname.value.trim();
+  const address = patientAddress.value.trim();
+  const gender  = patientGender.value;
+  const dob     = patientDOB.value.trim();
+
+  if (!name || !surname || !dob) {
+    return alert("Plotëso emrin, mbiemrin dhe datëlindjen!");
+  }
+
+  const tx    = db.transaction("patients","readwrite");
+  const store = tx.objectStore("patients");
+  store.add({name, surname, address, gender, dob, reports:[]});
+  tx.oncomplete = () => {
+    renderPatients();
+    patientName.value    = "";
+    patientSurname.value = "";
+    patientAddress.value = "";
+    patientDOB.value     = "";
+  };
+});
+
+// Render pacientet
+function renderPatients(filter=""){
+  patientsList.innerHTML = "";
+  const tx    = db.transaction("patients","readonly");
+  const store = tx.objectStore("patients");
+  let patientsArr = [];
+
+  store.openCursor().onsuccess = function(e){
+    const cursor = e.target.result;
+    if (cursor) {
+      const p = cursor.value;
+      if ((p.name + " " + p.surname).toLowerCase().includes(filter.toLowerCase())) {
+        patientsArr.push(p);
+      }
+      cursor.continue();
+    } else {
+      patientsArr.sort((a,b) => b.id - a.id);
+      patientsArr.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.name + " " + p.surname;
+        if (selectedPatientId === p.id) opt.selected = true;
+        patientsList.appendChild(opt);
+      });
+      if (!selectedPatientId && patientsArr.length > 0) {
+        selectedPatientId = patientsArr[0].id;
+        patientsList.value = selectedPatientId;
+      }
+      renderReportDates();
+    }
+  };
+}
+searchPatient.addEventListener('input', e => renderPatients(e.target.value));
+
+patientsList.addEventListener('change', e => {
+  selectedPatientId   = Number(e.target.value);
+  selectedReportDate  = null;
+  renderReportDates();
+});
+
+deletePatient.addEventListener('click', () => {
+  if (!selectedPatientId) return;
+  const tx = db.transaction("patients","readwrite");
+  tx.objectStore("patients").delete(selectedPatientId);
+  tx.oncomplete = () => {
+    selectedPatientId   = null;
+    selectedReportDate  = null;
+    renderPatients();
+    analysisList.innerHTML = "";
+    reportDates.innerHTML  = "";
+  };
+});
+
+// Popullo datat e raporteve
+function renderReportDates(){
+  reportDates.innerHTML = "";
+  if (!selectedPatientId) return;
+
+  const store = db.transaction("patients","readonly").objectStore("patients");
+  store.get(selectedPatientId).onsuccess = function(e){
+    const p = e.target.result;
+    if (!p.reports) p.reports = [];
+    p.reports.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.date;
+      opt.textContent = r.date;
+      reportDates.appendChild(opt);
+    });
+
+    const today       = new Date().toLocaleDateString();
+    const todayReport = p.reports.find(r => r.date === today);
+    selectedReportDate = todayReport ? today : (p.reports.length>0 ? p.reports[p.reports.length-1].date : null);
+    if (selectedReportDate) {
+      reportDates.value = selectedReportDate;
+    }
+    renderAnalysis();
+  };
+}
+
+reportDates.addEventListener('change', e => {
+  selectedReportDate = e.target.value;
+  renderAnalysis();
+});
+
+// Analizat e pacientit
+function renderAnalysis(){
+  if (!selectedPatientId || !selectedReportDate) {
+    analysisList.innerHTML = "";
+    return;
+  }
+
+  const store = db.transaction("patients","readonly").objectStore("patients");
+  store.get(selectedPatientId).onsuccess = function(e){
+    const p      = e.target.result;
+    const report = p.reports.find(r => r.date === selectedReportDate);
+    analysisList.innerHTML = "";
+    if (!report) return;
+
+    report.analyses.forEach((a,i) => {
+      const tr = document.createElement('tr');
+      let unit = "";
+      const match = a.name.match(/\(([^)]+)\)/);
+      if (match) unit = match[1];
+      let nameWithoutUnit = a.name.replace(/\s*\([^)]+\)/,"");
+
+      tr.innerHTML = `
+        <td>${nameWithoutUnit}</td>
+        <td><input value="${a.value || ''}" data-index="${i}" class="valInput"></td>
+        <td>${unit}</td>
+        <td>${a.reference}</td>
+        <td><button class="delBtn" data-index="${i}">Fshij</button></td>
+      `;
+      analysisList.appendChild(tr);
+    });
+
+    // ndrysho vlerat
+    document.querySelectorAll('.valInput').forEach(inp => {
+      inp.addEventListener('input', e => {
+        const idx = Number(e.target.dataset.index);
+        const val = e.target.value;
+        const tx  = db.transaction("patients","readwrite").objectStore("patients");
+        tx.get(selectedPatientId).onsuccess = function(ev){
+          const p   = ev.target.result;
+          const rep = p.reports.find(r => r.date === selectedReportDate);
+          rep.analyses[idx].value = val;
+          db.transaction("patients","readwrite").objectStore("patients").put(p);
+        };
+      });
+    });
+
+    document.querySelectorAll('.delBtn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        const idx   = Number(e.target.dataset.index);
+        const tx    = db.transaction("patients","readwrite");
+        const store = tx.objectStore("patients");
+        store.get(selectedPatientId).onsuccess = function(ev){
+          const p   = ev.target.result;
+          const rep = p.reports.find(r => r.date === selectedReportDate);
+          rep.analyses.splice(idx,1);
+          store.put(p);
+          renderAnalysis();
+        };
+      });
+    });
+  };
+}
+
+// Shto Analize
+addAnalysis.addEventListener('click', () => {
+  if (!selectedPatientId) return alert("Zgjidh pacientin!");
+
+  const today = new Date().toLocaleDateString();
+  if (!selectedReportDate || selectedReportDate !== today) selectedReportDate = today;
+
+  const type      = analysisType.value;
+  const name      = analysisName.value;
+  const reference = analysesByType[type][name];
+
+  const store = db.transaction("patients", "readwrite").objectStore("patients");
+  store.get(selectedPatientId).onsuccess = function (e) {
+    const p = e.target.result;
+    if (!p.reports) p.reports = [];
+
+    let report = p.reports.find(r => r.date === selectedReportDate);
+    if (!report) {
+      report = { date: selectedReportDate, analyses: [] };
+      p.reports.push(report);
+    }
+
+    if (report.analyses.find(a => a.name === name)) {
+      return alert("Analiza tashmë ekziston në raportin e sotëm!");
+    }
+
+    report.analyses.push({ type, name, value: "", reference });
+    store.put(p);
+    renderReportDates();
+    renderAnalysis();
+  };
+});
+
+// Raporti Profesional
+function generateReportFunc(){
+  if (!selectedPatientId || !selectedReportDate) {
+    return alert("Zgjidh pacientin dhe datën!");
+  }
+
+  const store = db.transaction("patients","readonly").objectStore("patients");
+  store.get(selectedPatientId).onsuccess = function(e){
+    const p      = e.target.result;
+    const report = p.reports.find(r => r.date === selectedReportDate);
+    if (!report) return alert("Raporti nuk ekziston!");
+
+    let html = `
+      <div style="text-align:center; margin-bottom:20px;">
+        <h1 style="text-align:center;"><img src="logo.png.png" alt="" width="35" height="35">POLIKLINIKA BIOENG</h1>
+        <h2>Raporti laboratorik</h2>
+      </div>
+      <p>Rruga Sadullah Bresovci nr. 100 Gjilan tel: 044369264</p>
+      <p><strong>Emri:</strong> ${p.name} &nbsp;&nbsp; <strong>Mbiemri:</strong> ${p.surname}</p>
+      <p><strong>Adresa:</strong> ${p.address} &nbsp;&nbsp; <strong>Gjinia:</strong> ${p.gender}</p>
+      <p><strong>Datëlindja:</strong> ${p.dob} &nbsp;&nbsp; <strong>Data e raportit:</strong> ${report.date}</p>
+    `;
+
+    const grouped = {};
+    report.analyses.forEach(a => {
+      if (!grouped[a.type]) grouped[a.type] = [];
+      grouped[a.type].push(a);
+    });
+
+    for (const type in grouped) {
+      html += `
+        <div class="report-section" style="margin-top:5px; padding-top:0;">
+          <h3 style="margin-bottom:0; padding-bottom:3px;">${type}</h3>
+          <table style="margin-top:0;">
+            <tr>
+              <th style="width:2%;">Analiza</th>
+              <th style="width:1%;">Vlera</th>
+              <th style="width:1%;">Njësia</th>
+              <th style="width:5%;">Referenca</th>
+            </tr>
+      `;
+
+      grouped[type].forEach(a => {
+        let unit = "";
+        const match = a.name.match(/\(([^)]+)\)/);
+        if (match) unit = match[1];
+        let nameWithoutUnit = a.name.replace(/\s*\([^)]+\)/,"").trim();
+
+        if (type === "Hematologji" && nameWithoutUnit === "Hemoglobina M") {
+          // rresht bosh 11cm (siç e ke kërkuar)
+          html += `
+            <tr>
+              <td colspan="4" style="border:none; padding:0;">
+                <div style="height:11cm;"></div>
+              </td>
+            </tr>
+          `;
+        } else {
+          html += `
+            <tr>
+              <td>${nameWithoutUnit}</td>
+              <td>${a.value}</td>
+              <td>${unit}</td>
+              <td>${a.reference}</td>
+            </tr>
+          `;
+        }
+      });
+
+      html += `</table></div>`;
+    }
+
+    html += `
+      <div class="final-signs">
+        <div><p>Vertetoi: Dr. Mamudije Luma<br>Specialist i Biokimise Klinike</p></div>
+        <div><p>Punoi: Mr. sc. Ardian Hyseni<br>Biokimist</p></div>
+      </div>
+    `;
+
+    reportContainer.innerHTML     = html;
+    reportContainer.style.display = "block";
+  };
+}
+
+// Print me logo dhe titull
+printReport.addEventListener('click', () => {
+  if (!selectedPatientId) return alert("Zgjidh pacientin!");
+  generateReportFunc();
+  setTimeout(() => {
+    const printWindow = window.open('', '', 'width=900,height=700');
+    printWindow.document.write('<html><head><title>Raporti Profesional</title>');
+    printWindow.document.write('<style>body{font-family:Times New Roman, serif; color:#333; margin:20px;} h1,h2,h3{color:#b30000;} table{width:100%; border-collapse:collapse; margin-top:10px;} th, td{border:1px solid #ccc; padding:4px; text-align:center;} th{background:#fce4e4;} .final-signs{display:flex; justify-content:space-between; width:100%; margin-top:60px;} .final-signs div:first-child{text-align:left;} .final-signs div:last-child{text-align:right;}</style>');
+    printWindow.document.write('</head><body>');
+    printWindow.document.write(reportContainer.innerHTML);
+    printWindow.document.write('</body></html>');
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  }, 300);
+});
+
+// Shkarko PDF
+downloadPDF.addEventListener('click', () => {
+  generateReportFunc();
+  setTimeout(() => {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    doc.html(reportContainer, {
+      callback: function(d){ d.save("Raporti_Analizave.pdf"); },
+      x:10, y:10, html2canvas:{scale:0.5}
+    });
+  }, 300);
+});
+</script>
+
+<!-- Seksioni për Menaxhimin e Pagesave -->
+<style>
+#menaxhimi-pagesave p {
+    margin: 1px 0 !important;
+    padding: 0 !important;
+    line-height: 8px !important;
+    font-size: 14px !important;
+}
+</style>
+
+<section id="menaxhimi-pagesave" style="margin-top:40px; padding:5px; border:2px solid #4CAF50; border-radius:10px;">
+  <h2 style="color:#2E7D32;">💰 Menaxhimi i Pagesave - Laboratori Bioeng</h2>
+
+  <div style="margin-top:10px;">
+    <input type="text" id="emriPacientit" placeholder="Shkruaj emrin e pacientit" style="padding:2px;">
+    <input type="number" id="shumaPageses" placeholder="Shuma (€)" style="padding:2px; width:80px;">
+    <button onclick="shtoPagesen()" style="background:#4CAF50; color:white; padding:3px 6px; border:none; border-radius:5px;">💾 Shto Pagesë</button>
+  </div>
+  <hr>
+  <h3>📅 Pagesat ditore</h3>
+  <ul id="listaDitore" class="payment-list" style="padding:0; margin:0;"></ul>
+  <p><b>Totali ditor:</b> <span id="totalDitor">0</span> €</p>
+
+  <h3>🗓️ Pagesat javore</h3>
+  <ul id="listaJavore" class="payment-list" style="padding:0; margin:0;"></ul>
+  <p><b>Totali javor:</b> <span id="totalJavor">0</span> €</p>
+
+  <h3>📆 Pagesat mujore</h3>
+  <ul id="listaMujore" class="payment-list" style="padding:0; margin:0;"></ul>
+  <p><b>Totali mujor:</b> <span id="totalMujor">0</span> €</p>
+
+  <h3>📈 Pagesat vjetore</h3>
+  <ul id="listaVjetore" class="payment-list" style="padding:0; margin:0;"></ul>
+  <p><b>Totali vjetor:</b> <span id="totalVjetor">0</span> €</p>
+
+  <hr>
+  <button onclick="fshijTeDhenat()" style="background:#f44336; color:white; padding:6px 12px; border:none; border-radius:5px;">🗑️ Fshij të gjitha pagesat</button>
+</section>
+
+<script>
+  // Ruajtje e pagesave në localStorage sipas datës
+  let pagesat = JSON.parse(localStorage.getItem("pagesat")) || [];
+
+  function shtoPagesen() {
+    const emri = document.getElementById("emriPacientit").value.trim();
+    const shuma = parseFloat(document.getElementById("shumaPageses").value);
+    if (!emri || isNaN(shuma) || shuma <= 0) return alert("Shkruaj emrin dhe shumën e saktë!");
+
+    const data = new Date();
+    const hyrje = {
+      emri,
+      shuma,
+      data: data.toLocaleDateString("sq-AL"),
+      muaji: data.getMonth(),
+      viti: data.getFullYear(),
+      java: getJavaEvit(data)
+    };
+
+    pagesat.push(hyrje);
+    localStorage.setItem("pagesat", JSON.stringify(pagesat));
+    shfaqPagesat();
+    document.getElementById("emriPacientit").value = "";
+    document.getElementById("shumaPageses").value = "";
+  }
+
+  function getJavaEvit(date) {
+    const firstJan = new Date(date.getFullYear(), 0, 1);
+    const days = Math.floor((date - firstJan) / (24 * 60 * 60 * 1000));
+    return Math.ceil((days + firstJan.getDay() + 1) / 7);
+  }
+
+  function shfaqPagesat() {
+    const sot         = new Date().toLocaleDateString("sq-AL");
+    const javaAktuale = getJavaEvit(new Date());
+    const muajiAktual = new Date().getMonth();
+    const vitiAktual  = new Date().getFullYear();
+
+    const ditore  = pagesat.filter(p => p.data === sot);
+    const javore  = pagesat.filter(p => p.java === javaAktuale && p.viti === vitiAktual);
+    const mujore  = pagesat.filter(p => p.muaji === muajiAktual && p.viti === vitiAktual);
+    const vjetore = pagesat.filter(p => p.viti === vitiAktual);
+
+    shfaqLista("listaDitore",  ditore);
+    shfaqLista("listaJavore",  javore);
+    shfaqLista("listaMujore",  mujore);
+    shfaqLista("listaVjetore", vjetore);
+
+    document.getElementById("totalDitor").textContent  = llogaritTotal(ditore);
+    document.getElementById("totalJavor").textContent  = llogaritTotal(javore);
+    document.getElementById("totalMujor").textContent  = llogaritTotal(mujore);
+    document.getElementById("totalVjetor").textContent = llogaritTotal(vjetore);
+  }
+
+  function shfaqLista(id, lista) {
+    const ul = document.getElementById(id);
+    ul.innerHTML = "";
+    lista.forEach((p, i) => {
+      const li = document.createElement("li");
+      li.innerHTML = `
+        ${i + 1}. ${p.emri} – ${p.shuma} € (${p.data})
+        <button onclick="fshijPagesen(${pagesat.indexOf(p)})"
+          style="margin-left:10px; padding:2px 6px; background:#d9534f; color:white; border:none; border-radius:4px; font-size:12px;">
+          Fshij
+        </button>
+      `;
+      ul.appendChild(li);
+    });
+  }
+
+  function fshijPagesen(index) {
+    if (!confirm("A dëshironi ta fshini këtë pagesë?")) return;
+    pagesat.splice(index, 1);
+    localStorage.setItem("pagesat", JSON.stringify(pagesat));
+    shfaqPagesat();
+  }
+
+  function llogaritTotal(lista) {
+    return lista.reduce((a, b) => a + b.shuma, 0).toFixed(2);
+  }
+
+  function fshijTeDhenat() {
+    if (confirm("A je i sigurt që dëshiron t’i fshish të gjitha pagesat?")) {
+      localStorage.removeItem("pagesat");
+      pagesat = [];
+      shfaqPagesat();
+    }
+  }
+
+  // Shfaq automatikisht kur hapet faqja
+  window.onload = shfaqPagesat;
+</script>
+
+</body>
+</html>
