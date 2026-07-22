@@ -1,0 +1,24 @@
+BIOENG — versioni 11
+
+1. Hapni bioeng-raporte-v2.html me Chrome ose Edge.
+2. Hyni me llogarinë e laboratorit.
+3. Pagesat:
+   - Zgjidhni pacientin nga lista.
+   - Shënoni shumën, statusin dhe datën; klikoni “Ruaj pagesën”.
+   - “Totali i ditës” llogarit vetëm regjistrimet “E paguar”.
+   - Për përmbledhjen e javës, muajit dhe vitit hapni seksionin financiar
+     dhe përdorni kodin 0000.
+4. Terminet:
+   - Te tabela e termineve, ndryshoni statusin direkt: Caktuar,
+     Përfunduar, Anuluar ose S'u paraqit.
+5. Pacientët:
+   - “Hiq pacientin nga lista” e largon nga lista e punës, por nuk fshin
+     raportet mjekësore. Kjo ruan historikun dhe është më e sigurt.
+6. Analizat:
+   - Zgjidhni kategorinë dhe klikoni analizën në listë; ajo shtohet menjëherë.
+   - Lista nuk mbyllet, prandaj mund të shtoni analizën tjetër pa buton shtesë.
+
+Kujdes: ky është version lokal HTML. Kodi 0000 pengon qasjen e zakonshme në
+ekran, por nuk është siguri e plotë kundër dikujt që ka kopje të skedarit.
+Në serverin që do të ndërtojmë, qasja financiare do të vendoset sipas rolit të
+përdoruesit dhe do të ruhet në mënyrë të sigurt.
