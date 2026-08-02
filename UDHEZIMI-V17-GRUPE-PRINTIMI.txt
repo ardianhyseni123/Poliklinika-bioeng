@@ -1,0 +1,13 @@
+BIOENG — Versioni 17: Grupimi i analizave në raport
+
+Kur hapet një raport laboratorik për printim/PDF, analizat ndahen automatikisht
+në grupe, për shembull:
+- Analizat Hematologjike
+- Analizat Biokimike
+- Analizat Hormonale
+- Analizat Urinare
+- Analizat e koagulimit, virusale, imunologjike, tumor markerët dhe grupet tjera.
+
+Rezultatet brenda secilit grup ruajnë renditjen në të cilën janë shtuar.
+Grupimi bëhet vetëm në raportin për printim; nuk ndryshon regjistrimin e
+analizave ose pjesët tjera të programit.
