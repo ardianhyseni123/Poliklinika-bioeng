@@ -5,7 +5,7 @@ const test = require('node:test');
 const vm = require('node:vm');
 
 const ROOT = path.resolve(__dirname, '..');
-const SYNC_PATH = path.join(ROOT, 'firebase-sync.js');
+const SYNC_PATH = path.join(ROOT, 'docs', 'firebase-sync.js');
 
 function loadTestHooks() {
   const source = fs.readFileSync(SYNC_PATH, 'utf8');

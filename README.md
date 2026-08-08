@@ -6,7 +6,7 @@ after a user signs in.
 
 ## Firebase behavior
 
-- With `window.BIOENG_FIREBASE_CONFIG` left as `null` in `firebase-config.js`,
+- With `window.BIOENG_FIREBASE_CONFIG` left as `null` in `docs/firebase-config.js`,
   the app behaves as the existing local-only version.
 - With a valid configuration, the same five email accounts authenticate through
   Firebase Authentication and their trusted `role` claim controls Firestore
@@ -26,7 +26,16 @@ after a user signs in.
 - If IndexedDB itself cannot write, the app remains usable with an in-memory
   session fallback and warns that those changes can be lost on refresh.
 - The one-time JSON import utility is isolated under `tools/firebase-import` and
-  is never loaded by `index.html`.
+  is never loaded by `docs/index.html`.
+
+## Layout
+
+The served site is exactly the four files in `docs/`: `index.html`,
+`firebase-config.js`, `firebase-sync.js`, and `logo.png.png`. Nothing else in
+the repository is deployable, which keeps clinical backups and the Admin SDK
+importer off any public host by construction rather than by an ignore rule.
+The Firebase SDK is fetched from `gstatic.com` at runtime, so there is no build
+step and no bundled dependency to refresh.
 
 See [FIREBASE_SETUP.md](FIREBASE_SETUP.md) for project setup and security-rule
 deployment. See [tools/firebase-import/README.md](tools/firebase-import/README.md)

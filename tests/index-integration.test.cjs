@@ -5,9 +5,10 @@ const test = require('node:test');
 const vm = require('node:vm');
 
 const ROOT = path.resolve(__dirname, '..');
-const INDEX_PATH = path.join(ROOT, 'index.html');
-const SYNC_PATH = path.join(ROOT, 'firebase-sync.js');
-const CONFIG_PATH = path.join(ROOT, 'firebase-config.js');
+const SITE = path.join(ROOT, 'docs');
+const INDEX_PATH = path.join(SITE, 'index.html');
+const SYNC_PATH = path.join(SITE, 'firebase-sync.js');
+const CONFIG_PATH = path.join(SITE, 'firebase-config.js');
 const RULES_PATH = path.join(ROOT, 'firestore.rules');
 const IMPORTER_PATH = path.join(ROOT, 'tools', 'firebase-import', 'import.mjs');
 

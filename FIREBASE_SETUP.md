@@ -8,7 +8,7 @@ client configuration is intentionally supplied separately.
 ## Client configuration
 
 Register a Web app in the Firebase project, then paste its configuration object
-into `firebase-config.js`. The required fields are `apiKey`, `authDomain`,
+into `docs/firebase-config.js`. The required fields are `apiKey`, `authDomain`,
 `projectId`, and `appId`. No `storageBucket` is needed. Leave the value as `null`
 for the existing local-only mode. Once a non-null object is supplied, all four
 fields are required; an incomplete production configuration blocks login instead
@@ -27,7 +27,7 @@ Recommended activation order:
 1. Create Firestore and the Email/Password sign-in provider.
 2. Deploy the Firestore rules and indexes below.
 3. Dry-run, then commit the standalone backup import with the account template.
-4. Paste the web configuration into `firebase-config.js` last.
+4. Paste the web configuration into `docs/firebase-config.js` last.
 
 This order keeps the deployed app in local-only mode until its data, accounts,
 claims, and server rules are ready together.
@@ -110,6 +110,50 @@ firebase deploy --only firestore:rules,firestore:indexes
 
 No Storage rules or bucket CORS configuration are needed, because no attachment
 ever leaves the browser.
+
+## Hosting
+
+`firebase.json` serves `docs/`, which contains only the four files the browser
+loads. The folder is named `docs` because GitHub Pages can serve a repository
+root or a folder named `/docs` and nothing else, so the same directory works as
+the document root for either host without a second branch or a build step.
+`docs/.nojekyll` stops GitHub Pages from running Jekyll over the folder;
+Firebase skips that file through the `**/.*` ignore rule.
+
+```sh
+firebase deploy --only hosting
+```
+
+This serves the app at `https://bioeng-c8397.web.app` and
+`https://bioeng-c8397.firebaseapp.com`. Preview a change on a temporary URL
+before publishing it to the clinic:
+
+```sh
+firebase hosting:channel:deploy preview --expires 7d
+```
+
+`index.html`, `firebase-sync.js`, and `firebase-config.js` are served with
+`Cache-Control: no-cache` because they carry no content hash; a revalidation
+request is cheap and a stale clinical build is not. The logo is cached for a
+week. Responses also carry `X-Content-Type-Options`, `X-Frame-Options`, and
+`Referrer-Policy`. These headers come from `firebase.json` and therefore apply
+to Firebase Hosting only — GitHub Pages ignores them and applies its own
+caching.
+
+### Authorized domains
+
+Firebase Authentication rejects a sign-in from a domain it does not know.
+`bioeng-c8397.web.app` and `bioeng-c8397.firebaseapp.com` are authorized
+automatically, so a Firebase Hosting deployment needs no further action. Any
+other origin must be added first under **Authentication → Settings → Authorized
+domains** in the Firebase console, including a GitHub Pages domain such as
+`<account>.github.io` and any custom domain. Without that entry the app loads
+and then fails at login.
+
+The `apiKey` in `docs/firebase-config.js` is a public project identifier, not a
+secret; it is safe in a public repository. Access is controlled by the
+Authentication providers and the Firestore rules in this repository, which is
+why the authorized-domain list and the rules matter and the key does not.
 
 Run the one-time JSON import from the separate `tools/firebase-import` utility;
 the production app contains no import command.
