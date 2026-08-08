@@ -1,0 +1,436 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return request.auth.token.role;
+    }
+
+    function isLab() {
+      return signedIn() && role() == 'Laborator';
+    }
+
+    function isSpecialist() {
+      return signedIn()
+        && role() in ['Kardiologji', 'Pulmologji', 'Neurologji', 'Hixhame'];
+    }
+
+    function hasValidRole() {
+      return isLab() || isSpecialist();
+    }
+
+    function isUuid(value) {
+      return value is string
+        && value.matches('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$');
+    }
+
+    function isExactReplay() {
+      return request.resource.data.diff(resource.data).affectedKeys().size() == 0;
+    }
+
+    function validPatient(patientId, data) {
+      return isUuid(patientId)
+        && data.keys().hasAll([
+          'id',
+          'firstName',
+          'lastName',
+          'dob',
+          'gender',
+          'phone',
+          'address',
+          'archived',
+          'createdAt'
+        ])
+        && data.id == patientId
+        && data.firstName is string
+        && data.lastName is string
+        && data.dob is string
+        && data.gender is string
+        && data.phone is string
+        && data.address is string
+        && data.archived is bool
+        && data.createdAt is string
+        && data.get('archivedAt', '') is string;
+    }
+
+    function reportIdMatches(reportId, data) {
+      return isUuid(reportId) && data.id == reportId;
+    }
+
+    function validReportTag(type, specialty) {
+      return type is string
+        && specialty is string
+        && (
+          (type == 'laboratory' && specialty == 'Laborator')
+          || (
+            type == 'specialist'
+            && specialty in ['Kardiologji', 'Pulmologji', 'Neurologji', 'Hixhame']
+          )
+        );
+    }
+
+    function validReportClassification(data) {
+      return isUuid(data.patientId)
+        && validReportTag(data.type, data.specialty);
+    }
+
+    function validHixhame(data) {
+      return data == null
+        || (
+          data is map
+          && data.get('services', []) is list
+          && data.get('cups', '') is string
+          && data.get('cupPositions', []) is list
+          && data.get('leeches', '') is string
+          && data.get('leechPositions', []) is list
+        );
+    }
+
+    function validActiveReportFields(data) {
+      return data.keys().hasAll([
+          'id',
+          'patientId',
+          'type',
+          'specialty',
+          'reportAt',
+          'clinician',
+          'clinicianTitle',
+          'anamnesis',
+          'physicalExam',
+          'existingResults',
+          'diagnoses',
+          'customDiagnoses',
+          'requestedExams',
+          'therapy',
+          'notes',
+          'analyses',
+          'hixhame',
+          'createdAt',
+          'updatedAt',
+          'revision'
+        ])
+        && data.reportAt is string
+        && data.clinician is string
+        && data.clinicianTitle is string
+        && data.anamnesis is string
+        && data.physicalExam is string
+        && data.existingResults is string
+        && data.diagnoses is list
+        && data.customDiagnoses is string
+        && data.requestedExams is list
+        && data.therapy is string
+        && data.notes is string
+        && data.analyses is list
+        && validHixhame(data.hixhame)
+        && data.createdAt is string
+        && data.updatedAt is string
+        && data.revision is int
+        && data.revision >= 1;
+    }
+
+    function isActiveReport(data) {
+      return !('_deleted' in data) || data._deleted == false;
+    }
+
+    function deletedByCurrentUser(data) {
+      return data.deletedBy is string
+        && request.auth.token.email is string
+        && data.deletedBy == request.auth.token.email;
+    }
+
+    function isValidReportTombstone(reportId, data) {
+      return reportIdMatches(reportId, data)
+        && validReportClassification(data)
+        && data.keys().hasAll([
+          'id',
+          'patientId',
+          'type',
+          'specialty',
+          '_deleted',
+          'deletedAt',
+          'deletedBy',
+          'baseRevision'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'patientId',
+          'type',
+          'specialty',
+          '_deleted',
+          'deletedAt',
+          'deletedBy',
+          'baseRevision'
+        ])
+        && data._deleted == true
+        && (data.deletedAt is timestamp || data.deletedAt is string)
+        && data.baseRevision is int
+        && data.baseRevision >= 0
+        && deletedByCurrentUser(data);
+    }
+
+    function isValidActiveReport(reportId, data) {
+      return reportIdMatches(reportId, data)
+        && validReportClassification(data)
+        && validActiveReportFields(data)
+        && isActiveReport(data)
+        && !('deletedAt' in data)
+        && !('deletedBy' in data)
+        && !('baseRevision' in data);
+    }
+
+    function specialistCanAccess(data) {
+      return isSpecialist()
+        && data.type == 'specialist'
+        && data.specialty == role();
+    }
+
+    function canReadReport(data) {
+      return isLab() || specialistCanAccess(data);
+    }
+
+    function specialistIdentityMatches(data) {
+      return request.auth.token.get('name', '') is string
+        && request.auth.token.get('title', '') is string
+        && request.auth.token.get('name', '').size() > 0
+        && request.auth.token.get('title', '').size() > 0
+        && data.clinician == request.auth.token.get('name', '')
+        && data.clinicianTitle == request.auth.token.get('title', '');
+    }
+
+    function canWriteReport(data) {
+      return isLab()
+        || (
+          specialistCanAccess(data)
+          && (
+            data.get('_deleted', false) == true
+            || specialistIdentityMatches(data)
+          )
+        );
+    }
+
+    function reportIdentityUnchanged(before, after) {
+      return after.id == before.id
+        && after.patientId == before.patientId
+        && after.type == before.type
+        && after.specialty == before.specialty;
+    }
+
+    function validAuditActor(data) {
+      return signedIn()
+        && data.actorUid is string
+        && data.actorUid == request.auth.uid
+        && data.actorEmail is string
+        && request.auth.token.email is string
+        && data.actorEmail == request.auth.token.email
+        && data.actorRole is string
+        && data.actorRole == role()
+        && validReportTag(data.reportType, data.specialty);
+    }
+
+    function validAuditRecord(auditId, data) {
+      return isUuid(auditId)
+        && data.keys().hasAll([
+          'id',
+          'action',
+          'reportId',
+          'patientId',
+          'at',
+          'revision'
+        ])
+        && data.id == auditId
+        && data.action in ['REPORT_CREATED', 'REPORT_UPDATED', 'REPORT_DELETED']
+        && isUuid(data.reportId)
+        && isUuid(data.patientId)
+        && data.at is string
+        && data.revision is int
+        && data.revision >= 1;
+    }
+
+    function canCreateAudit(data) {
+      return validAuditActor(data)
+        && (
+          isLab()
+          || (
+            isSpecialist()
+            && data.reportType == 'specialist'
+            && data.specialty == role()
+          )
+        );
+    }
+
+    function validAppointment(appointmentId, data) {
+      return isUuid(appointmentId)
+        && data.keys().hasAll([
+          'id',
+          'patientId',
+          'patientName',
+          'appointmentAt',
+          'status',
+          'specialty',
+          'clinician',
+          'phone',
+          'note',
+          'createdAt'
+        ])
+        && data.id == appointmentId
+        && isUuid(data.patientId)
+        && data.patientName is string
+        && data.appointmentAt is string
+        && data.status in ['Caktuar', 'Përfunduar', 'Anuluar', "S'u paraqit"]
+        && data.specialty in ['Laborator', 'Kardiologji', 'Pulmologji', 'Neurologji', 'Hixhame']
+        && data.clinician is string
+        && data.phone is string
+        && data.note is string
+        && data.createdAt is string
+        && data.get('expired', false) is bool
+        && data.get('expiredAt', '') is string
+        && data.get('updatedAt', '') is string;
+    }
+
+    function validPayment(paymentId, data) {
+      return isUuid(paymentId)
+        && data.keys().hasAll([
+          'id',
+          'patientId',
+          'patientName',
+          'amount',
+          'status',
+          'paymentDate',
+          'note',
+          'recordedAt',
+          'recordedBy'
+        ])
+        && data.id == paymentId
+        && isUuid(data.patientId)
+        && data.patientName is string
+        && data.amount is number
+        && data.status in ['PAID', 'UNPAID']
+        && data.paymentDate is string
+        && data.note is string
+        && data.recordedAt is string
+        && data.recordedBy is string
+        && request.auth.token.email is string
+        && data.recordedBy == request.auth.token.email
+        && (
+          data.get('reportId', '') == ''
+          || isUuid(data.reportId)
+        )
+        && data.get('reportLabel', '') is string
+        && data.get('reportTotal', 0) is number;
+    }
+
+    match /patients/{patientId} {
+      allow read: if hasValidRole();
+      allow create: if hasValidRole()
+        && validPatient(patientId, request.resource.data);
+      allow update: if validPatient(patientId, request.resource.data)
+        && (
+          // A specialist may only retry an already-accepted create verbatim.
+          isLab() || (hasValidRole() && isExactReplay())
+        );
+      allow delete: if false;
+    }
+
+    match /reports/{reportId} {
+      allow read: if canReadReport(resource.data);
+
+      allow create: if hasValidRole()
+        && (
+          isValidActiveReport(reportId, request.resource.data)
+          || (
+            isValidReportTombstone(reportId, request.resource.data)
+            && request.resource.data.baseRevision == 0
+          )
+        )
+        && canWriteReport(request.resource.data);
+
+      allow update: if hasValidRole()
+        && (
+          // A lost acknowledgement may replay the same accepted document verbatim.
+          (
+            isExactReplay()
+            && (
+              (
+                isValidReportTombstone(reportId, resource.data)
+                && isValidReportTombstone(reportId, request.resource.data)
+              )
+              || (
+                isValidActiveReport(reportId, resource.data)
+                && isValidActiveReport(reportId, request.resource.data)
+              )
+            )
+            && canWriteReport(resource.data)
+          )
+          || (
+            // Tombstones remain terminal; only active reports can transition.
+            isValidActiveReport(reportId, resource.data)
+            && (
+              (
+                isValidActiveReport(reportId, request.resource.data)
+                && request.resource.data.revision > resource.data.revision
+              )
+              || (
+                reportIdentityUnchanged(resource.data, request.resource.data)
+                && isValidReportTombstone(reportId, request.resource.data)
+                && request.resource.data.baseRevision == resource.data.revision
+              )
+            )
+            && (
+              isLab()
+              || (
+                specialistCanAccess(resource.data)
+                && specialistCanAccess(request.resource.data)
+                && reportIdentityUnchanged(resource.data, request.resource.data)
+                && canWriteReport(request.resource.data)
+              )
+            )
+          )
+        );
+
+      // Synced deletion is represented by an update to a terminal tombstone.
+      allow delete: if false;
+    }
+
+    match /appointments/{appointmentId} {
+      allow read: if isLab();
+      allow create: if isLab()
+        && validAppointment(appointmentId, request.resource.data);
+      allow update: if isLab()
+        && validAppointment(appointmentId, request.resource.data);
+      allow delete: if false;
+    }
+
+    match /payments/{paymentId} {
+      allow read: if isLab();
+      allow create: if isLab()
+        && validPayment(paymentId, request.resource.data);
+      allow update: if isLab()
+        && validPayment(paymentId, request.resource.data);
+      allow delete: if false;
+    }
+
+    match /audit/{auditId} {
+      allow read: if isLab();
+      allow create: if validAuditRecord(auditId, request.resource.data)
+        && canCreateAudit(request.resource.data);
+      // Append-only audit writes may be retried, but their data cannot change.
+      allow update: if isExactReplay()
+        && validAuditRecord(auditId, request.resource.data)
+        && canCreateAudit(request.resource.data);
+      allow delete: if false;
+    }
+
+    // Created only by the one-time Admin SDK importer, which bypasses rules.
+    match /_bioeng_imports/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

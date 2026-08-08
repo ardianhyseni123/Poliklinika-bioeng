@@ -1,0 +1,16 @@
+{
+  "name": "bioeng-firebase-import",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "One-time, local-only migration utility for Bioeng clinical backups.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "import": "node import.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.4.0"
+  }
+}
