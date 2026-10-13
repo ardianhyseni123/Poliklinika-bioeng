@@ -1,0 +1,61 @@
+{
+  "format": "bioeng-firebase-accounts",
+  "version": 1,
+  "accounts": [
+    {
+      "email": "admin@bioeng.com",
+      "passwordEnv": "BIOENG_ADMIN_PASSWORD",
+      "displayName": "Laboratori BIOENG",
+      "disabled": false,
+      "claims": {
+        "role": "Laborator",
+        "name": "Laboratori BIOENG",
+        "title": "Laborator"
+      }
+    },
+    {
+      "email": "pulmolog@bioeng.com",
+      "passwordEnv": "BIOENG_PULMONOLOGY_PASSWORD",
+      "displayName": "Dr. Refik Sylaj",
+      "disabled": false,
+      "claims": {
+        "role": "Pulmologji",
+        "name": "Dr. Refik Sylaj",
+        "title": "Specialist i Pulmologjisë"
+      }
+    },
+    {
+      "email": "kardiolog@bioeng.com",
+      "passwordEnv": "BIOENG_CARDIOLOGY_PASSWORD",
+      "displayName": "Dr. Rilind Sylaj",
+      "disabled": false,
+      "claims": {
+        "role": "Kardiologji",
+        "name": "Dr. Rilind Sylaj",
+        "title": "Specialist i Kardiologjisë"
+      }
+    },
+    {
+      "email": "neurolog@bioeng.com",
+      "passwordEnv": "BIOENG_NEUROLOGY_PASSWORD",
+      "displayName": "Dr. Nezir Demiolli",
+      "disabled": false,
+      "claims": {
+        "role": "Neurologji",
+        "name": "Dr. Nezir Demiolli",
+        "title": "Specialist i Neurologjisë"
+      }
+    },
+    {
+      "email": "hixhama@bioeng.com",
+      "passwordEnv": "BIOENG_HIXHAME_PASSWORD",
+      "displayName": "Njësia Hixhame BIOENG",
+      "disabled": false,
+      "claims": {
+        "role": "Hixhame",
+        "name": "Njësia Hixhame BIOENG",
+        "title": "Njësia e Hixhames"
+      }
+    }
+  ]
+}

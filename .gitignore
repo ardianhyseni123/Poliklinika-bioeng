@@ -1,0 +1,13 @@
+# Clinical backups contain personal and medical data.
+bioeng-backup-*.json
+
+# Firebase credentials and local tooling state.
+service-account*.json
+firebase-service-account*.json
+.firebase/
+firebase-debug.log
+tools/firebase-import/accounts.json
+tools/firebase-import/*.local.json
+
+# Local dependencies.
+node_modules/
