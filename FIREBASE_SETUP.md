@@ -98,6 +98,13 @@ refresh their ID token) after a claim changes.
 - Specialist report listeners must constrain both `type == "specialist"` and
   `specialty == <token role>`. Sort locally when tombstones must be observed,
   because an `orderBy` excludes documents that do not contain its field.
+- The analysis list (`analysisCatalog/current`) is readable and writable only
+  by the Laborator account. It is created at revision 1, every update must
+  advance the revision by exactly one, and `updatedBy` must be the signed-in
+  token email. It is never deleted.
+- `catalogHistory` is append-only. Each entry is written in the same
+  transaction as the list revision it describes; the rule checks this with
+  `getAfter`. Its `by` field must be the signed-in token email.
 
 ## Deploy
 
@@ -107,6 +114,11 @@ rules and indexes:
 ```sh
 firebase deploy --only firestore:rules,firestore:indexes
 ```
+
+Deploy the rules before a hosting update that depends on them. Until the
+analysis-list rules are live, the app keeps synchronizing patients and reports,
+uses its built-in analysis list, and refuses to save list changes with a
+message asking for the rules to be published.
 
 No Storage rules or bucket CORS configuration are needed, because no attachment
 ever leaves the browser.

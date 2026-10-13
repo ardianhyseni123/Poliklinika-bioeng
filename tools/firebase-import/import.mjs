@@ -250,8 +250,10 @@ function validateReports(records, validator) {
         for (const key of ['parameter', 'result', 'unit', 'reference']) {
           validator.require(typeof analysis[key] === 'string', `${analysisLocation}.${key}`, 'must be a string');
         }
-        if (analysis.category !== undefined) {
-          validator.require(typeof analysis.category === 'string', `${analysisLocation}.category`, 'must be a string');
+        for (const key of ['category', 'printGroup']) {
+          if (analysis[key] !== undefined) {
+            validator.require(typeof analysis[key] === 'string', `${analysisLocation}.${key}`, 'must be a string');
+          }
         }
       });
     }

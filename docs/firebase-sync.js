@@ -5,8 +5,11 @@
   const SDK_ROOT = `https://www.gstatic.com/firebasejs/${SDK_VERSION}`;
   const REQUIRED_CONFIG_KEYS = ['apiKey', 'authDomain', 'projectId', 'appId'];
   const VALID_ROLES = ['Laborator', 'Pulmologji', 'Kardiologji', 'Neurologji', 'Hixhame'];
+  // The analysis list is one revisioned document plus an append-only change log. Both are
+  // written only by saveCatalog, inside one transaction, and never through the outbox.
+  const CATALOG_STORES = ['analysisCatalog', 'catalogHistory'];
   // Attachments never leave the device, so Firestore holds every synchronized store.
-  const FIRESTORE_STORES = ['patients', 'reports', 'appointments', 'payments', 'audit'];
+  const FIRESTORE_STORES = ['patients', 'reports', 'appointments', 'payments', 'audit', ...CATALOG_STORES];
 
   let services = null;
   let initializing = null;
@@ -203,14 +206,28 @@
     return snapshot.docs.map(item => ({...item.data(), id: item.id}));
   }
 
+  // Until the catalog rules are deployed, Firestore denies these collections. Skip them so
+  // patients and reports keep synchronizing; the app then works with its built-in list.
+  function isUndeployedCatalogRule(store, error) {
+    return CATALOG_STORES.includes(store) && classifyFirebaseError(error) === 'permission';
+  }
+
   async function pull(role) {
     const sdk = await init();
     if (!sdk || !activeIdentity) return {};
     const result = {};
     try {
       await Promise.all(storesForRole(role).map(async store => {
-        const snapshot = await sdk.firestoreApi.getDocs(scopedCollection(store, role));
-        result[store] = snapshotRecords(snapshot);
+        try {
+          const snapshot = await sdk.firestoreApi.getDocs(scopedCollection(store, role));
+          result[store] = snapshotRecords(snapshot);
+        } catch (error) {
+          if (isUndeployedCatalogRule(store, error)) {
+            console.warn(`Firestore rules do not allow ${store} yet; using the local analysis list.`);
+            return;
+          }
+          throw error;
+        }
       }));
       return result;
     } catch (error) {
@@ -240,7 +257,13 @@
           }));
           if (changes.length) Promise.resolve(onChanges(changes)).catch(error => reportError(error, 'remote-change'));
         },
-        error => reportError(error, 'realtime')
+        error => {
+          if (isUndeployedCatalogRule(store, error)) {
+            console.warn(`Firestore rules do not allow ${store} yet; live updates of the analysis list are off.`);
+            return;
+          }
+          reportError(error, 'realtime');
+        }
       );
       realtimeUnsubscribers.push(unsubscribe);
     }
@@ -328,7 +351,7 @@
     const sdk = await init();
     if (!sdk || !activeIdentity) throw Object.assign(new Error('Firebase is not authenticated.'), {code: 'firebase/not-authenticated', category: 'offline'});
     const {store, operation, recordId, value} = mutation;
-    if (!FIRESTORE_STORES.includes(store)) {
+    if (!FIRESTORE_STORES.includes(store) || CATALOG_STORES.includes(store)) {
       throw Object.assign(new Error('Unknown synchronized store.'), {code: 'firebase/invalid-store'});
     }
     try {
@@ -351,6 +374,30 @@
     }
   }
 
+  // Saving needs a connection: a stale device must learn about a newer list before it can
+  // replace it, so the revision check and the change-log entry share one transaction.
+  async function saveCatalog(catalog, expectedRevision, history) {
+    const sdk = await init();
+    if (!sdk || !activeIdentity) throw Object.assign(new Error('Firebase is not authenticated.'), {code: 'firebase/not-authenticated', category: 'offline'});
+    if (!Number.isInteger(expectedRevision) || expectedRevision < 0 || Number(catalog?.revision) !== expectedRevision + 1) {
+      throw revisionConflict('The analysis list revision must advance by exactly one.');
+    }
+    const catalogRef = sdk.firestoreApi.doc(sdk.db, 'analysisCatalog', String(catalog.id));
+    const historyRef = sdk.firestoreApi.doc(sdk.db, 'catalogHistory', String(history.id));
+    try {
+      await sdk.firestoreApi.runTransaction(sdk.db, async transaction => {
+        const snapshot = await transaction.get(catalogRef);
+        const storedRevision = snapshot.exists() ? Number(snapshot.data()?.revision) : 0;
+        if (storedRevision !== expectedRevision) throw revisionConflict('The analysis list has a newer Firebase revision.');
+        transaction.set(catalogRef, sanitizeForFirestore({...catalog, updatedBy: activeIdentity.email}));
+        transaction.set(historyRef, sanitizeForFirestore({...history, by: activeIdentity.email}));
+      });
+    } catch (error) {
+      if (error?.category === 'conflict') throw error;
+      throw makePublicError(error, 'save-catalog');
+    }
+  }
+
   window.BioengFirebase = {
     isConfigured: isFirebaseConfigured,
     init,
@@ -360,6 +407,7 @@
     startRealtime,
     stopRealtime,
     applyMutation,
+    saveCatalog,
     classifyError: classifyFirebaseError,
     sanitizeForFirestore,
     _test: {isFirebaseConfigured, classifyFirebaseError, sanitizeForFirestore}

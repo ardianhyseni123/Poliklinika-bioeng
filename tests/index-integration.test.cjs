@@ -116,7 +116,7 @@ test('cloud writes commit local data and their durable outbox entry atomically',
   assert.match(put, /if\(cloudSync\)await persistDataAndMutation\(/);
   assert.match(remove, /if\(cloudSync\)await persistDataAndMutation\(/);
   assert.match(indexSource, /createObjectStore\(\s*['"]syncQueue['"]\s*,\s*\{\s*keyPath\s*:\s*['"]id['"]\s*\}\s*\)/);
-  assert.match(indexSource, /DB_VERSION\s*=\s*6\b/);
+  assert.match(indexSource, /DB_VERSION\s*=\s*7\b/);
 });
 
 test('local-only writes never create an outbox entry', () => {
@@ -635,7 +635,9 @@ test('role-sensitive local operations retain defense-in-depth guards', () => {
     'openFinance',
     'archivePatient',
     'saveAppointment',
-    'exportBackup'
+    'exportBackup',
+    'saveCatalogDraft',
+    'ensureCatalogStored'
   ]) {
     assertLaboratoryGuard(name);
   }
@@ -754,4 +756,130 @@ test('in-app backup restore is limited to local-only laboratory sessions', () =>
     /hideBackupImportPreview\(\)/,
     'a parsed backup must not survive a session change'
   );
+});
+
+function loadCatalogModel() {
+  const builtInList = indexSource.slice(indexSource.indexOf('const analysisCatalog={'), indexSource.indexOf('const exams='));
+  const names = [
+    'legacyGroupLabel', 'normalizeCatalog', 'buildSeedCatalog', 'isValidCatalog', 'catalogChange',
+    'diffCatalog', 'validateCatalog', 'referenceFlag', 'referenceSupportsFlag', 'catalogAnalysisItem',
+    'analysisGroupLabel', 'printGroupFor'
+  ];
+  const sandbox = {crypto: globalThis.crypto, model: null};
+  vm.runInNewContext(
+    `${builtInList}\nconst CATALOG_ID='current';\n${names.map(name => functionSection(indexSource, name)).join('\n')}\n` +
+      `let catalog=buildSeedCatalog();\nmodel={analysisCatalog,catalog,${names.join(',')}};`,
+    sandbox
+  );
+  // Values cross the VM realm boundary, so compare them through JSON.
+  return sandbox.model;
+}
+
+test('the analysis list is seeded once from the built-in list without losing rows or print headings', () => {
+  const {analysisCatalog, catalog, validateCatalog, isValidCatalog} = loadCatalogModel();
+  const builtInRows = Object.values(analysisCatalog).flat().filter(Array.isArray).length;
+  const seededRows = catalog.categories.reduce((total, category) => total + category.analyses.length, 0);
+
+  assert.equal(seededRows, builtInRows, 'every built-in analysis must reach the database');
+  assert.equal(catalog.revision, 0, 'an unsaved seed starts below the first stored revision');
+  assert.ok(isValidCatalog(catalog));
+  assert.equal(validateCatalog(catalog).length, 0, 'the seed must pass the same validation as a manual save');
+  const ids = catalog.categories.flatMap(category => [category.id, ...category.analyses.map(item => item.id)]);
+  assert.equal(new Set(ids).size, ids.length, 'category and analysis IDs must be unique');
+
+  const viral = catalog.categories.find(category => category.name === 'Virusale e zgjeruar').analyses.map(item => item.name);
+  assert.ok(viral.includes('Anti HIV 1/2') && viral.includes('Anti-HBs'), 'rows must not be swallowed by a missing comma');
+  for (const category of catalog.categories.filter(item => item.name.startsWith('Hormonale'))) {
+    assert.ok(category.analyses.every(item => !item.reference.includes(';')), 'hormone ranges keep their one-line-per-range layout');
+  }
+  assert.equal(JSON.stringify(catalog.categories.filter(item => item.bulkAdd).map(item => item.name)), JSON.stringify(['Hematologji', 'Urine']));
+  const heading = name => catalog.categories.find(category => category.name === name).printGroup;
+  assert.equal(heading('Biokimi e zgjeruar'), 'Analizat Biokimike');
+  assert.equal(heading('Urina - sediment dhe 24h'), 'Analizat Urinare');
+  assert.equal(heading('Kontrolla Specialistike'), 'Analiza të tjera');
+});
+
+test('every saved list change is logged with its old and new value', () => {
+  const {catalog, diffCatalog, validateCatalog} = loadCatalogModel();
+  const edited = JSON.parse(JSON.stringify(catalog));
+  const chemistry = edited.categories.find(category => category.name === 'Biokimi');
+  chemistry.analyses[0].reference = '3.9 - 5.8';
+  chemistry.analyses[1].unit = 'mg/dL';
+  edited.categories.find(category => category.name === 'Hematologji').analyses.push(chemistry.analyses.splice(2, 1)[0]);
+  chemistry.analyses[3].active = false;
+  chemistry.analyses.push({id: 'new-analysis', name: 'Analizë e re', unit: 'U/L', reference: '<10', active: true});
+
+  const changes = diffCatalog(catalog, edited);
+  const reference = changes.find(change => change.field === 'Vlera referente');
+  assert.equal(reference.from, '3.3-6.1');
+  assert.equal(reference.to, '3.9 - 5.8');
+  for (const field of ['Njësia', 'Kategoria', 'Shfaqet në listë', 'Analizë e re']) {
+    assert.ok(changes.some(change => change.field === field), `${field} must be logged`);
+  }
+  assert.equal(diffCatalog(catalog, JSON.parse(JSON.stringify(catalog))).length, 0, 'an untouched list has nothing to save');
+
+  chemistry.analyses.push({...chemistry.analyses[0], id: 'duplicate'});
+  assert.match(validateCatalog(edited).join(' '), /dy herë/, 'a duplicate analysis name in one category must block the save');
+});
+
+test('reference formats report whether results can be flagged H/L automatically', () => {
+  const {referenceSupportsFlag} = loadCatalogModel();
+  for (const reference of ['3.3 - 6.1', '0.55 - 4.78', '<40', '> 5']) assert.equal(referenceSupportsFlag(reference), true, reference);
+  for (const reference of ['Negativ', 'M: 1 - 2; F: 3 - 4', '']) assert.equal(referenceSupportsFlag(reference), false, reference);
+});
+
+test('reports keep their own unit, reference, and print heading after the list changes', () => {
+  const {catalog, catalogAnalysisItem, printGroupFor} = loadCatalogModel();
+  const chemistry = catalog.categories.find(category => category.name === 'Biokimi');
+  const item = catalogAnalysisItem(chemistry, chemistry.analyses[0]);
+  assert.equal(item.category, 'Biokimi');
+  assert.equal(item.printGroup, 'Analizat Biokimike');
+  assert.equal(printGroupFor({parameter: 'Analizë e panjohur', printGroup: 'Titull i ruajtur'}), 'Titull i ruajtur');
+  assert.equal(printGroupFor({parameter: 'Analizë e panjohur', category: 'Virusale'}), 'Analizat virusale', 'removed categories keep their old heading');
+
+  const rows = functionSection(indexSource, 'drawAnalyses');
+  assert.match(rows, /\.unitInput'\)\.forEach\(x=>x\.addEventListener\('input',\(\)=>\{analyses\[Number\(x\.dataset\.i\)\]\.unit=x\.value\}/);
+  assert.match(rows, /\.referenceInput'\)\.forEach\(x=>x\.addEventListener\('input',\(\)=>\{const i=Number\(x\.dataset\.i\);analyses\[i\]\.reference=x\.value;updateResultFlag\(i\)\}/);
+  assert.equal(indexSource.split('<tr data-group="${esc(printGroupFor(a))}">').length - 1, 2, 'both print layouts must carry the stored heading');
+  assert.match(functionSection(indexSource, 'groupPrintedAnalyses'), /const label=row\.dataset\.group\|\|analysisGroupLabel\(/);
+});
+
+test('the analysis list is saved with a revision check and never through the report outbox', () => {
+  const localSave = functionSection(indexSource, 'storeCatalogLocally');
+  assert.match(localSave, /db\.transaction\(\[CATALOG_STORE,CATALOG_HISTORY_STORE\],'readwrite'\)/);
+  assert.match(localSave, /expectedRevision!==null&&\(Number\(current\?\.revision\)\|\|0\)!==expectedRevision\)\{abortReason=catalogConflict\(\)/);
+  assert.doesNotMatch(localSave, /syncQueue|createMutation|persistDataAndMutation/);
+  assert.match(
+    functionSection(indexSource, 'persistCatalogRevision'),
+    /if\(currentUser\?\.cloud&&window\.BioengFirebase\?\.isConfigured\(\)\)\{await window\.BioengFirebase\.saveCatalog\(next,expectedRevision,entry\);await storeCatalogLocally\(next,entry\);return\}/
+  );
+  assert.doesNotMatch(indexSource, /\bput\(\s*(?:CATALOG_STORE|CATALOG_HISTORY_STORE|['"]analysisCatalog['"]|['"]catalogHistory['"])/);
+  const upgrade = functionSection(indexSource, 'upgradeLocalDatabase');
+  assert.match(upgrade, /createObjectStore\('analysisCatalog',\{keyPath:'id'\}\)/);
+  assert.match(upgrade, /createObjectStore\('catalogHistory',\{keyPath:'id'\}\)/);
+
+  assert.match(syncSource, /const CATALOG_STORES = \['analysisCatalog', 'catalogHistory'\];/);
+  assert.match(syncSource, /const FIRESTORE_STORES = \[[^\]]*\.\.\.CATALOG_STORES\];/);
+  assert.match(functionSection(syncSource, 'applyMutation'), /!FIRESTORE_STORES\.includes\(store\)\s*\|\|\s*CATALOG_STORES\.includes\(store\)/);
+  const save = functionSection(syncSource, 'saveCatalog');
+  assert.match(save, /Number\(catalog\?\.revision\) !== expectedRevision \+ 1/);
+  assert.match(save, /runTransaction\(/);
+  assert.match(save, /if \(storedRevision !== expectedRevision\) throw revisionConflict\(/);
+  assert.ok(save.indexOf('transaction.set(catalogRef') > 0 && save.indexOf('transaction.set(historyRef') > 0, 'the list and its log entry share one transaction');
+  assert.match(
+    functionSection(syncSource, 'isUndeployedCatalogRule'),
+    /CATALOG_STORES\.includes\(store\) && classifyFirebaseError\(error\) === 'permission'/,
+    'only the new catalog collections may be skipped when their rules are missing'
+  );
+
+  const catalogRules = rulesSource.slice(rulesSource.indexOf('match /analysisCatalog/{catalogId}'), rulesSource.indexOf('match /catalogHistory/{historyId}'));
+  assert.match(catalogRules, /allow read: if isLab\(\);/);
+  assert.match(catalogRules, /request\.resource\.data\.revision == 1;/);
+  assert.match(catalogRules, /request\.resource\.data\.revision == resource\.data\.revision \+ 1;/);
+  assert.match(catalogRules, /allow delete: if false;/);
+  assert.match(functionSection(rulesSource, 'validCatalog'), /data\.updatedBy == request\.auth\.token\.email/);
+  const historyRules = rulesSource.slice(rulesSource.indexOf('match /catalogHistory/{historyId}'), rulesSource.indexOf('match /_bioeng_imports'));
+  assert.match(historyRules, /getAfter\(\/databases\/\$\(database\)\/documents\/analysisCatalog\/current\)\.data\.revision\s*== request\.resource\.data\.revision/);
+  assert.match(historyRules, /allow update, delete: if false;/);
+  assert.match(functionSection(rulesSource, 'validCatalogHistory'), /data\.by == request\.auth\.token\.email/);
 });

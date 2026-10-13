@@ -424,6 +424,58 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    function validCatalog(catalogId, data) {
+      return catalogId == 'current'
+        && data.keys().hasAll(['id', 'revision', 'updatedAt', 'updatedBy', 'categories'])
+        && data.keys().hasOnly(['id', 'revision', 'updatedAt', 'updatedBy', 'categories'])
+        && data.id == catalogId
+        && data.revision is int
+        && data.updatedAt is string
+        && data.updatedBy is string
+        && request.auth.token.email is string
+        && data.updatedBy == request.auth.token.email
+        && data.categories is list
+        && data.categories.size() <= 300;
+    }
+
+    function validCatalogHistory(historyId, data) {
+      return isUuid(historyId)
+        && data.keys().hasAll(['id', 'at', 'by', 'revision', 'changes'])
+        && data.keys().hasOnly(['id', 'at', 'by', 'revision', 'changes'])
+        && data.id == historyId
+        && data.at is string
+        && data.by is string
+        && request.auth.token.email is string
+        && data.by == request.auth.token.email
+        && data.revision is int
+        && data.revision >= 1
+        && data.changes is list
+        && data.changes.size() <= 1000;
+    }
+
+    // The analysis list and its reference ranges: one document whose revision advances by
+    // exactly one per save, so a device holding an older list cannot overwrite a newer one.
+    match /analysisCatalog/{catalogId} {
+      allow read: if isLab();
+      allow create: if isLab()
+        && validCatalog(catalogId, request.resource.data)
+        && request.resource.data.revision == 1;
+      allow update: if isLab()
+        && validCatalog(catalogId, request.resource.data)
+        && request.resource.data.revision == resource.data.revision + 1;
+      allow delete: if false;
+    }
+
+    // Append-only change log, written in the same transaction as the revision it describes.
+    match /catalogHistory/{historyId} {
+      allow read: if isLab();
+      allow create: if isLab()
+        && validCatalogHistory(historyId, request.resource.data)
+        && getAfter(/databases/$(database)/documents/analysisCatalog/current).data.revision
+          == request.resource.data.revision;
+      allow update, delete: if false;
+    }
+
     // Created only by the one-time Admin SDK importer, which bypasses rules.
     match /_bioeng_imports/{document=**} {
       allow read, write: if false;
