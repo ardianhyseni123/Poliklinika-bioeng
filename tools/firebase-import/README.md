@@ -1,9 +1,11 @@
 # Bioeng Firebase administration
 
-This directory holds two standalone administration utilities. Nothing here is
+This directory holds three standalone administration utilities. Nothing here is
 loaded by the clinical app.
 
 - `npm run users` manages who can sign in to the app and with which role.
+- `npm run compare` shows how a backup file differs from what is in Firestore.
+  It only reads.
 - `npm run import` is the one-time backup import. It validates a Bioeng backup in
   dry-run mode by default and only writes when `--commit` is supplied.
 
@@ -74,6 +76,30 @@ npm run users -- remove doctor@example.com
 Passwords are never handled by this tool: change them, disable users, or delete
 them in the Firebase console. The project defaults to the one in `.firebaserc`;
 pass `--project-id` to use another.
+
+## Comparing a backup with Firestore
+
+To check whether a backup holds anything that live Firestore lacks, from this directory:
+
+```sh
+npm run compare -- ../../new/bioeng-backup-2026-11-13.json
+```
+
+It reads `patients`, `reports`, `appointments`, `payments` and `audit`, matches them
+by id, and prints a count table followed by the records that are:
+
+- **MISSING from live**: in the backup only. Data that may need restoring.
+- **Backup is NEWER**: a report whose backup revision is higher than live.
+- **Different**: same id, other values (patients, payments and appointments carry
+  no revision, so neither side is assumed newer). Shows both values.
+- **Deleted in live**: a report deleted after the backup. Leave it deleted.
+- **Live is newer** / **Only in live**: normal work done after the backup. An
+  "only in live" record marked *older than the backup* was simply not on the
+  exporting device.
+
+Missing, null and empty values count as the same. Patient names and values are
+printed to your terminal; add `--no-names` for output you want to share. Nothing
+is written anywhere.
 
 ## Validate first
 

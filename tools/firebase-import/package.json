@@ -3,13 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Local-only admin utilities for Bioeng: one-time backup import and app user roles.",
+  "description": "Local-only admin utilities for Bioeng: one-time backup import, backup-to-Firestore comparison, and app user roles.",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "import": "node import.mjs",
-    "users": "node users.mjs"
+    "users": "node users.mjs",
+    "compare": "node compare.mjs"
   },
   "dependencies": {
     "firebase-admin": "^13.4.0"

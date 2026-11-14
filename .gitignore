@@ -21,3 +21,4 @@ firestore-debug.log
 # Playwright results.
 test-results/
 playwright-report/
+new/
