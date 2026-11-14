@@ -11,3 +11,13 @@ tools/firebase-import/*.local.json
 
 # Local dependencies.
 node_modules/
+
+# Build output of the new app.
+dist/
+
+# Firebase emulator logs.
+firestore-debug.log
+
+# Playwright results.
+test-results/
+playwright-report/

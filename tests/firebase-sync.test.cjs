@@ -91,6 +91,8 @@ test('Firebase errors are classified into actionable fallback categories', () =>
     [{code: 'auth/user-token-expired'}, 'permission'],
     [{code: 'auth/invalid-credential'}, 'authentication'],
     [{code: 'auth/user-disabled'}, 'authentication'],
+    [{code: 'auth/invalid-email'}, 'authentication'],
+    [{code: 'auth/missing-password'}, 'authentication'],
     [{code: 'something-new'}, 'unknown'],
     [null, 'unknown']
   ];

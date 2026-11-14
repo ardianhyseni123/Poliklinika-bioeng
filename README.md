@@ -8,9 +8,12 @@ after a user signs in.
 
 - With `window.BIOENG_FIREBASE_CONFIG` left as `null` in `docs/firebase-config.js`,
   the app behaves as the existing local-only version.
-- With a valid configuration, the same five email accounts authenticate through
-  Firebase Authentication and their trusted `role` claim controls Firestore
-  access. A partial non-null configuration blocks login.
+- With a valid configuration, Firebase Authentication is the list of users:
+  anyone there with a `role` and `name` custom claim can sign in, and the role
+  controls Firestore access. The app has no built-in account list in this mode.
+  Add or change users as described in
+  [Managing users](tools/firebase-import/README.md#managing-users). A partial
+  non-null configuration blocks login.
 - Report attachments are never synchronized. Cloud Storage is not used at all:
   a PDF, PNG, or JPG stays in the IndexedDB database of the browser that saved
   it, and only a backup exported from that device carries it elsewhere.
@@ -61,9 +64,39 @@ importer off any public host by construction rather than by an ignore rule.
 The Firebase SDK is fetched from `gstatic.com` at runtime, so there is no build
 step and no bundled dependency to refresh.
 
+## The rebuilt app (`src/`)
+
+A rebuilt app (Vite + TypeScript + React) replaces the old one at the cutover described in
+[CUTOVER.md](CUTOVER.md). Until then hosting serves `docs/`, the new rules wait in
+`firestore.v2.rules`, and `deploy.sh` keeps shipping the old app unchanged.
+
+What changes for the clinic:
+- Firebase's own offline cache does the syncing: work saved offline is kept and uploads
+  by itself, also after the tab was closed. Logging out is refused while something has not
+  reached the server yet.
+- Every report save is kept as a version. Two people editing the same report never
+  overwrite each other: the report is marked «⚠ Dy versione» and someone chooses.
+- Roles live in the Firestore `users` collection and are managed on the Administrator's
+  «Përdoruesit» page (accounts and passwords are still created in the Firebase console).
+- On the first login after the switch, reports the old app could not upload are found on
+  that computer and uploaded.
+- Printouts match the old app word for word (checked by the end-to-end tests).
+
+Working on it:
+- `npm run dev` starts local Firebase emulators with sample data (accounts and
+  password in `scripts/seed.mjs`) and the new app at http://localhost:5173. It never
+  touches the clinic's data. The emulators need Java 21+ (`.sdkmanrc` picks SDKMAN's).
+- `npm test` runs the type check, ESLint, unit tests, the emulator tests (Firestore
+  rules and the data layer), and the old app's tests.
+- `npm run test:e2e` runs the browser tests on their own emulators, including the print
+  comparison with the old app (screenshots in `test-results/print-parity/`). They use the
+  installed Google Chrome.
+- `scripts/deploy-app.sh check` runs all of it and builds; `scripts/deploy-app.sh cutover`
+  does the switch.
+
 See [FIREBASE_SETUP.md](FIREBASE_SETUP.md) for project setup and security-rule
 deployment. See [tools/firebase-import/README.md](tools/firebase-import/README.md)
-for the dry run, account provisioning, and one-time import command.
+for managing users and roles, and for the one-time import command.
 
 ## Deploying
 

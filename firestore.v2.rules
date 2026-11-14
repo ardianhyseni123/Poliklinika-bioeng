@@ -1,0 +1,553 @@
+rules_version = '2';
+
+// Rules for the rebuilt app. They replace firestore.rules at cutover; until then only the
+// emulators use them (firebase.emulators.json), so the live app keeps its current rules.
+//
+// Principles:
+// - A user's role, name and title come from users/{lowercase email}, written only by an
+//   Administrator. Custom claims are no longer read.
+// - Every read rule tolerates a document that does not exist yet.
+// - A valid report write is never rejected for being based on an older revision: offline
+//   writes that the server rejects are dropped silently by the SDK. Instead, every save
+//   also creates an immutable version under reports/{id}/versions, and the app detects and
+//   resolves concurrent edits from that history.
+// - Nothing is ever hard-deleted.
+//
+// Each rule loads the caller's profile once with me() and passes it (p) to the helpers:
+// rules count every evaluated expression across a whole batch, and re-reading the profile
+// inside every helper exceeds that limit.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- Who is asking ---------------------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null && request.auth.token.email is string;
+    }
+
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    // The caller's users document when it exists and is active, otherwise null.
+    function me() {
+      let profile = signedIn()
+        ? get(/databases/$(database)/documents/users/$(myEmail()))
+        : null;
+      return profile != null && profile.data.get('active', false) == true
+        ? profile.data
+        : null;
+    }
+
+    function isAdminRole(p) {
+      return p != null && p.role == 'Administrator';
+    }
+
+    // Administrator can do everything Laborator can.
+    function isLabRole(p) {
+      return p != null && p.role in ['Administrator', 'Laborator'];
+    }
+
+    function isSpecialistRole(p) {
+      return p != null && p.role in ['Kardiologji', 'Pulmologji', 'Neurologji', 'Hixhame'];
+    }
+
+    function hasRole(p) {
+      return isLabRole(p) || isSpecialistRole(p);
+    }
+
+    // ---- Shared validation -----------------------------------------------------------
+
+    function isUuid(value) {
+      return value is string
+        && value.matches('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$');
+    }
+
+    function isExactReplay() {
+      return request.resource.data.diff(resource.data).affectedKeys().size() == 0;
+    }
+
+    // ---- Users -----------------------------------------------------------------------
+
+    function validUser(email, data) {
+      return email == email.lower()
+        && data.keys().hasAll(['email', 'role', 'name', 'title', 'active', 'updatedAt', 'updatedBy'])
+        && data.keys().hasOnly(['email', 'role', 'name', 'title', 'active', 'updatedAt', 'updatedBy'])
+        && data.email == email
+        && data.role in ['Administrator', 'Laborator', 'Kardiologji', 'Pulmologji', 'Neurologji', 'Hixhame']
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 200
+        && data.title is string
+        && data.title.size() <= 200
+        // A specialist's reports must carry a title, so the profile needs one.
+        && (data.role in ['Administrator', 'Laborator'] || data.title.size() > 0)
+        && data.active is bool
+        && data.updatedAt is string
+        && data.updatedBy == myEmail();
+    }
+
+    match /users/{email} {
+      allow get: if signedIn() && (email == myEmail() || isAdminRole(me()));
+      allow list: if isAdminRole(me());
+      allow create, update: if isAdminRole(me()) && validUser(email, request.resource.data);
+      allow delete: if false;
+    }
+
+    // ---- Patients --------------------------------------------------------------------
+
+    function validPatient(patientId, data) {
+      return isUuid(patientId)
+        && data.keys().hasAll([
+          'id',
+          'firstName',
+          'lastName',
+          'dob',
+          'gender',
+          'phone',
+          'address',
+          'archived',
+          'createdAt'
+        ])
+        && data.id == patientId
+        && data.firstName is string
+        && data.lastName is string
+        && data.dob is string
+        && data.gender is string
+        && data.phone is string
+        && data.address is string
+        && data.archived is bool
+        && data.createdAt is string
+        && data.get('archivedAt', '') is string;
+    }
+
+    // A specialist may only resend an already-accepted create unchanged.
+    function canUpdatePatient(p) {
+      return isLabRole(p) || (hasRole(p) && isExactReplay());
+    }
+
+    match /patients/{patientId} {
+      allow read: if hasRole(me());
+      allow create: if hasRole(me())
+        && validPatient(patientId, request.resource.data);
+      allow update: if canUpdatePatient(me())
+        && validPatient(patientId, request.resource.data);
+      allow delete: if false;
+    }
+
+    // ---- Reports ---------------------------------------------------------------------
+
+    function validReportTag(type, specialty) {
+      return type is string
+        && specialty is string
+        && (
+          (type == 'laboratory' && specialty == 'Laborator')
+          || (
+            type == 'specialist'
+            && specialty in ['Kardiologji', 'Pulmologji', 'Neurologji', 'Hixhame']
+          )
+        );
+    }
+
+    function validReportClassification(reportId, data) {
+      return isUuid(reportId)
+        && data.id == reportId
+        && isUuid(data.patientId)
+        && validReportTag(data.type, data.specialty);
+    }
+
+    function validHixhame(data) {
+      return data == null
+        || (
+          data is map
+          && data.get('services', []) is list
+          && data.get('cups', '') is string
+          && data.get('cupPositions', []) is list
+          && data.get('leeches', '') is string
+          && data.get('leechPositions', []) is list
+        );
+    }
+
+    function isValidActiveReport(reportId, data) {
+      return validReportClassification(reportId, data)
+        && data.keys().hasAll([
+          'id',
+          'patientId',
+          'type',
+          'specialty',
+          'reportAt',
+          'clinician',
+          'clinicianTitle',
+          'anamnesis',
+          'physicalExam',
+          'existingResults',
+          'diagnoses',
+          'customDiagnoses',
+          'requestedExams',
+          'therapy',
+          'notes',
+          'analyses',
+          'hixhame',
+          'createdAt',
+          'updatedAt',
+          'revision'
+        ])
+        && !('deletedAt' in data)
+        && !('deletedBy' in data)
+        && !('baseRevision' in data)
+        && data.get('_deleted', false) == false
+        && data.reportAt is string
+        && data.clinician is string
+        && data.clinicianTitle is string
+        && data.anamnesis is string
+        && data.physicalExam is string
+        && data.existingResults is string
+        && data.diagnoses is list
+        && data.customDiagnoses is string
+        && data.requestedExams is list
+        && data.therapy is string
+        && data.notes is string
+        && data.analyses is list
+        && validHixhame(data.hixhame)
+        && data.createdAt is string
+        && data.updatedAt is string
+        && data.revision is int
+        && data.revision >= 1;
+    }
+
+    // Same shape as the tombstones the old app wrote, plus lastVersionId.
+    function isValidReportTombstone(reportId, data) {
+      return validReportClassification(reportId, data)
+        && data.keys().hasAll([
+          'id',
+          'patientId',
+          'type',
+          'specialty',
+          '_deleted',
+          'deletedAt',
+          'deletedBy',
+          'baseRevision'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'patientId',
+          'type',
+          'specialty',
+          '_deleted',
+          'deletedAt',
+          'deletedBy',
+          'baseRevision',
+          'lastVersionId'
+        ])
+        && data._deleted == true
+        && (data.deletedAt is timestamp || data.deletedAt is string)
+        && data.baseRevision is int
+        && data.baseRevision >= 0
+        && data.deletedBy == myEmail();
+    }
+
+    function isDeleted(data) {
+      return data.get('_deleted', false) == true;
+    }
+
+    function validReportState(reportId, data) {
+      return isDeleted(data)
+        ? isValidReportTombstone(reportId, data)
+        : isValidActiveReport(reportId, data);
+    }
+
+    function ownSpecialty(p, data) {
+      return isSpecialistRole(p)
+        && data.type == 'specialist'
+        && data.specialty == p.role;
+    }
+
+    function canSeeReport(p, data) {
+      return isLabRole(p) || ownSpecialty(p, data);
+    }
+
+    // resource is null when the document does not exist yet; anyone with a role may learn that.
+    function canGetReport(p, res) {
+      return isLabRole(p) || (isSpecialistRole(p) && (res == null || ownSpecialty(p, res.data)));
+    }
+
+    // A specialist signs with the name and title of their own profile.
+    function signsAs(p, data) {
+      return p.name is string
+        && p.title is string
+        && p.name.size() > 0
+        && p.title.size() > 0
+        && data.clinician == p.name
+        && data.clinicianTitle == p.title;
+    }
+
+    function canWriteReport(p, data) {
+      return isLabRole(p)
+        || (ownSpecialty(p, data) && (isDeleted(data) || signsAs(p, data)));
+    }
+
+    function reportIdentityUnchanged(before, after) {
+      return after.id == before.id
+        && after.patientId == before.patientId
+        && after.type == before.type
+        && after.specialty == before.specialty;
+    }
+
+    // Every head write is paired, in the same batch, with the version it points to. The
+    // version rule checks that the version's snapshot equals this head.
+    function writtenWithVersion(reportId, data) {
+      return isUuid(data.get('lastVersionId', ''))
+        && existsAfter(/databases/$(database)/documents/reports/$(reportId)/versions/$(data.lastVersionId));
+    }
+
+    function canCreateReport(reportId, data, p) {
+      return hasRole(p)
+        && canWriteReport(p, data)
+        && validReportState(reportId, data)
+        && writtenWithVersion(reportId, data);
+    }
+
+    // No revision ordering check: a stale but valid write is accepted and its version is
+    // kept, so the app can show the conflict instead of the SDK dropping the write.
+    function canUpdateReport(reportId, before, after, p) {
+      return hasRole(p)
+        // Tombstones are terminal.
+        && !isDeleted(before)
+        && (isLabRole(p) || (ownSpecialty(p, before) && reportIdentityUnchanged(before, after)))
+        && (!isDeleted(after) || reportIdentityUnchanged(before, after))
+        && canWriteReport(p, after)
+        && validReportState(reportId, after)
+        && writtenWithVersion(reportId, after);
+    }
+
+    // A version is a snapshot of the head written in the same batch. Permission to write it
+    // follows from the head write, which the head rules check.
+    // baseVersionId is the version the editor started from ('' for a new report), so the
+    // history is a tree: more than one open branch means two devices edited concurrently.
+    // resolves lists branches a person merged when settling such a conflict.
+    function canCreateVersion(reportId, versionId, data, p) {
+      let head = getAfter(/databases/$(database)/documents/reports/$(reportId));
+      return hasRole(p)
+        && isUuid(versionId)
+        && data.keys().hasAll([
+          'id', 'reportId', 'patientId', 'type', 'specialty', 'kind', 'revision',
+          'baseRevision', 'baseVersionId', 'resolves', 'savedAt', 'savedBy', 'report'
+        ])
+        && data.keys().hasOnly([
+          'id', 'reportId', 'patientId', 'type', 'specialty', 'kind', 'revision',
+          'baseRevision', 'baseVersionId', 'resolves', 'savedAt', 'savedBy', 'report'
+        ])
+        && data.id == versionId
+        && data.reportId == reportId
+        && data.kind in ['save', 'delete']
+        && data.revision is int
+        && data.revision >= 1
+        && data.baseRevision is int
+        && data.baseRevision >= 0
+        && (data.baseVersionId == '' || isUuid(data.baseVersionId))
+        && data.baseVersionId != versionId
+        && data.resolves is list
+        && data.resolves.size() <= 50
+        && data.savedAt is string
+        && data.savedBy == myEmail()
+        && head != null
+        && head.data.get('lastVersionId', '') == versionId
+        && data.report == head.data
+        && data.patientId == head.data.patientId
+        && data.type == head.data.type
+        && data.specialty == head.data.specialty
+        && (data.kind == 'delete') == isDeleted(head.data)
+        && (data.kind == 'delete' || data.revision == head.data.revision);
+    }
+
+    match /reports/{reportId} {
+      allow get: if canGetReport(me(), resource);
+      // Specialist queries must filter on type == 'specialist' and their own specialty.
+      allow list: if canSeeReport(me(), resource.data);
+      allow create: if canCreateReport(reportId, request.resource.data, me());
+      allow update: if canUpdateReport(reportId, resource.data, request.resource.data, me());
+      allow delete: if false;
+
+      match /versions/{versionId} {
+        allow get: if canGetReport(me(), resource);
+        allow list: if canSeeReport(me(), resource.data);
+        allow create: if canCreateVersion(reportId, versionId, request.resource.data, me());
+        allow update, delete: if false;
+      }
+    }
+
+    // ---- Audit (append-only) -----------------------------------------------------------
+
+    function validAuditRecord(auditId, data) {
+      return isUuid(auditId)
+        && data.keys().hasAll([
+          'id',
+          'action',
+          'reportId',
+          'patientId',
+          'at',
+          'revision'
+        ])
+        && data.id == auditId
+        && data.action in ['REPORT_CREATED', 'REPORT_UPDATED', 'REPORT_DELETED']
+        && isUuid(data.reportId)
+        && isUuid(data.patientId)
+        && data.at is string
+        && data.revision is int
+        && data.revision >= 1;
+    }
+
+    function canWriteAudit(data, p) {
+      return hasRole(p)
+        && data.actorUid == request.auth.uid
+        && data.actorEmail == myEmail()
+        && data.actorRole == p.role
+        && validReportTag(data.reportType, data.specialty)
+        && (isLabRole(p) || (data.reportType == 'specialist' && data.specialty == p.role));
+    }
+
+    match /audit/{auditId} {
+      allow read: if isLabRole(me());
+      allow create: if canWriteAudit(request.resource.data, me())
+        && validAuditRecord(auditId, request.resource.data);
+      allow update: if isExactReplay()
+        && canWriteAudit(request.resource.data, me())
+        && validAuditRecord(auditId, request.resource.data);
+      allow delete: if false;
+    }
+
+    // ---- Appointments and payments (laboratory only) ---------------------------------
+
+    function validAppointment(appointmentId, data) {
+      return isUuid(appointmentId)
+        && data.keys().hasAll([
+          'id',
+          'patientId',
+          'patientName',
+          'appointmentAt',
+          'status',
+          'specialty',
+          'clinician',
+          'phone',
+          'note',
+          'createdAt'
+        ])
+        && data.id == appointmentId
+        && isUuid(data.patientId)
+        && data.patientName is string
+        && data.appointmentAt is string
+        && data.status in ['Caktuar', 'Përfunduar', 'Anuluar', "S'u paraqit"]
+        && data.specialty in ['Laborator', 'Kardiologji', 'Pulmologji', 'Neurologji', 'Hixhame']
+        && data.clinician is string
+        && data.phone is string
+        && data.note is string
+        && data.createdAt is string
+        && data.get('expired', false) is bool
+        && data.get('expiredAt', '') is string
+        && data.get('updatedAt', '') is string;
+    }
+
+    function validPayment(paymentId, data) {
+      return isUuid(paymentId)
+        && data.keys().hasAll([
+          'id',
+          'patientId',
+          'patientName',
+          'amount',
+          'status',
+          'paymentDate',
+          'note',
+          'recordedAt',
+          'recordedBy'
+        ])
+        && data.id == paymentId
+        && isUuid(data.patientId)
+        && data.patientName is string
+        && data.amount is number
+        && data.status in ['PAID', 'UNPAID']
+        && data.paymentDate is string
+        && data.note is string
+        && data.recordedAt is string
+        && data.recordedBy == myEmail()
+        && (
+          data.get('reportId', '') == ''
+          || isUuid(data.reportId)
+        )
+        && data.get('reportLabel', '') is string
+        && data.get('reportTotal', 0) is number;
+    }
+
+    match /appointments/{appointmentId} {
+      allow read: if isLabRole(me());
+      allow create, update: if isLabRole(me())
+        && validAppointment(appointmentId, request.resource.data);
+      allow delete: if false;
+    }
+
+    match /payments/{paymentId} {
+      allow read: if isLabRole(me());
+      allow create, update: if isLabRole(me())
+        && validPayment(paymentId, request.resource.data);
+      allow delete: if false;
+    }
+
+    // ---- Analysis catalog --------------------------------------------------------------
+
+    function validCatalog(catalogId, data) {
+      return catalogId == 'current'
+        && data.keys().hasAll(['id', 'revision', 'updatedAt', 'updatedBy', 'categories'])
+        && data.keys().hasOnly(['id', 'revision', 'updatedAt', 'updatedBy', 'categories'])
+        && data.id == catalogId
+        && data.revision is int
+        && data.updatedAt is string
+        && data.updatedBy == myEmail()
+        && data.categories is list
+        && data.categories.size() <= 300;
+    }
+
+    function validCatalogHistory(historyId, data) {
+      return isUuid(historyId)
+        && data.keys().hasAll(['id', 'at', 'by', 'revision', 'changes'])
+        && data.keys().hasOnly(['id', 'at', 'by', 'revision', 'changes'])
+        && data.id == historyId
+        && data.at is string
+        && data.by == myEmail()
+        && data.revision is int
+        && data.revision >= 1
+        && data.changes is list
+        && data.changes.size() <= 1000;
+    }
+
+    // Saved online in one transaction: the revision advances by exactly one, so a device
+    // holding an older list cannot overwrite a newer one.
+    match /analysisCatalog/{catalogId} {
+      allow read: if isLabRole(me());
+      allow create: if isLabRole(me())
+        && validCatalog(catalogId, request.resource.data)
+        && request.resource.data.revision == 1;
+      allow update: if isLabRole(me())
+        && validCatalog(catalogId, request.resource.data)
+        && request.resource.data.revision == resource.data.revision + 1;
+      allow delete: if false;
+    }
+
+    match /catalogHistory/{historyId} {
+      allow read: if isLabRole(me());
+      allow create: if isLabRole(me())
+        && validCatalogHistory(historyId, request.resource.data)
+        && getAfter(/databases/$(database)/documents/analysisCatalog/current).data.revision
+          == request.resource.data.revision;
+      allow update, delete: if false;
+    }
+
+    // Written only by the Admin SDK importer, which bypasses rules.
+    match /_bioeng_imports/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

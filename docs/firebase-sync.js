@@ -44,7 +44,9 @@
       'auth/user-not-found',
       'auth/wrong-password',
       'auth/too-many-requests',
-      'auth/user-disabled'
+      'auth/user-disabled',
+      'auth/invalid-email',
+      'auth/missing-password'
     ];
 
     if (quotaCodes.some(item => code.includes(item))) return 'quota';

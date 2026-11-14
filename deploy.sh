@@ -293,6 +293,10 @@ finish() {
 
 deploy() {
   require_terminal
+  # After the cutover this script would put the old app and its old rules back live.
+  if [ -f "$ROOT/.cutover-complete" ]; then
+    fail "The rebuilt app is live ($(cat "$ROOT/.cutover-complete")). Use scripts/deploy-app.sh. To roll back on purpose, follow CUTOVER.md."
+  fi
   preflight
   run_tests
   commit_changes

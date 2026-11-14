@@ -1,0 +1,2 @@
+# Java for the Firebase emulators (they need 21 or newer). Run `sdk env` to use it in a shell.
+java=22-zulu

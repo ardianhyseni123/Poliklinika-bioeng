@@ -660,7 +660,31 @@ test('role-sensitive local operations retain defense-in-depth guards', () => {
   const printAccessCheck = printGuard.indexOf('canAccessReport(report)');
   const authorizedPrint = printGuard.indexOf('await showAuthorizedPrint(id)');
   assert.ok(printAccessCheck >= 0 && authorizedPrint > printAccessCheck, 'printing must occur only after the access check');
-  assert.match(functionSection(indexSource, 'login'), /identity\.role\s*!==\s*expected\.role/);
+  assert.match(
+    functionSection(indexSource, 'login'),
+    /openSession\(\{email:identity\.email,role:identity\.role,name:identity\.name,title:identity\.title,uid:identity\.uid,cloud:true\}\)/,
+    'a Firebase session must take its role and profile from the verified token, not from the page'
+  );
+  assert.match(
+    functionSection(syncSource, 'signIn'),
+    /if\s*\(\s*!VALID_ROLES\.includes\(role\)\s*\)\s*\{\s*await sdk\.authApi\.signOut/,
+    'an account without a valid role claim must be signed out'
+  );
+});
+
+test('Firebase login accepts any Authentication user with a role claim, not a built-in list', () => {
+  const login = functionSection(indexSource, 'login');
+  const firebaseBranch = login.indexOf('if(window.BioengFirebase?.isConfigured()){');
+  const signIn = login.indexOf('await window.BioengFirebase.signIn(email,pass)');
+  const localLookup = login.indexOf('LOCAL_ONLY_USERS[email]');
+  assert.ok(firebaseBranch >= 0 && signIn > firebaseBranch, 'configured login must call Firebase sign-in');
+  assert.ok(localLookup > signIn, 'the built-in local accounts may be consulted only after the Firebase branch');
+  assert.doesNotMatch(
+    login.slice(0, signIn),
+    /LOCAL_ONLY_USERS|USERS\[/,
+    'no hardcoded account list may gate Firebase sign-in'
+  );
+  assert.doesNotMatch(indexSource, /\bUSERS\[/, 'the old hardcoded USERS gate must stay removed');
 });
 
 test('Firestore rules bind specialist and payment identities to authenticated claims', () => {
@@ -696,8 +720,8 @@ test('Firestore rules bind specialist and payment identities to authenticated cl
 
   assert.match(
     login,
-    /identity\.email\s*!==\s*email\s*\|\|\s*identity\.role\s*!==\s*expected\.role\s*\|\|\s*identity\.name\s*!==\s*expected\.name\s*\|\|\s*identity\.title\s*!==\s*expected\.title/,
-    'configured login must match every Firebase identity field to the exact built-in account profile'
+    /identity\.email\s*!==\s*email\s*\|\|\s*!identity\.name/,
+    'configured login must reject a Firebase identity for another email or without a name claim'
   );
   const identityMismatch = login.indexOf('identity.email!==email');
   const forcedSignOut = login.indexOf('await window.BioengFirebase.signOut()', identityMismatch);

@@ -15,8 +15,9 @@ fields are required; an incomplete production configuration blocks login instead
 of silently accepting the built-in local credentials.
 
 Enable Email/Password authentication before provisioning accounts. The account
-template in `tools/firebase-import/accounts.example.json` contains the same five
-emails, roles, names, and titles as the current app, but no passwords. Passwords
+template in `tools/firebase-import/accounts.example.json` contains the original
+five emails, roles, names, and titles, but no passwords; further users are added
+later with `npm run users` (see [Account claims](#account-claims)). Passwords
 are read only from the environment during the one-time Admin SDK run.
 Use new, strong Firebase passwords; do not reuse the legacy passwords embedded
 for the unchanged local-only mode. Those legacy values are never accepted as a
@@ -63,24 +64,30 @@ with a report is written to that browser's IndexedDB database and stays there:
 
 Treat the exported backup as the only durable copy of an attachment.
 
-## Account claims
+## Roles after the cutover
 
-Provision exactly the five existing accounts outside the browser app. Their
-trusted `role` claim must use this exact mapping:
+The rebuilt app reads each person's role, name and title from the Firestore document
+`users/{lowercase email}` instead of custom claims (rules: `firestore.v2.rules`). Only an
+Administrator can write those documents, in the app («Përdoruesit») or with
+`npm run users`. Public sign-up must be turned off (Authentication → Settings → User
+actions), so that only accounts created in the console exist. See [CUTOVER.md](CUTOVER.md).
 
-| Email | Required role |
+## Account claims (old app)
+
+Firebase Authentication is the app's list of users. A user can sign in once its
+account has these custom claims:
+
+| Claim | Value |
 | --- | --- |
-| `admin@bioeng.com` | `Laborator` |
-| `pulmolog@bioeng.com` | `Pulmologji` |
-| `kardiolog@bioeng.com` | `Kardiologji` |
-| `neurolog@bioeng.com` | `Neurologji` |
-| `hixhama@bioeng.com` | `Hixhame` |
+| `role` | One of `Laborator`, `Pulmologji`, `Kardiologji`, `Neurologji`, `Hixhame` |
+| `name` | Shown in the app; a specialist's reports must carry this name |
+| `title` | Printed under the name; a specialist's reports must carry this title |
 
-The standalone importer rejects missing accounts, extra accounts, and any role
-assigned to the wrong email. It also writes the template's `name` and `title`
-claims. Claims must be assigned with the Admin SDK or another trusted admin
-environment. Never let a client write its own role. Users must sign in again (or
-refresh their ID token) after a claim changes.
+Any number of users may share a role. A user without a valid `role` is signed
+out again with "Kjo llogari nuk ka rol në Firebase". The Firebase console cannot
+edit custom claims, so set them with `npm run users` in `tools/firebase-import`
+(see its README). Never let a client write its own role. Users must sign in again
+after a claim changes.
 
 ## Rule contracts
 

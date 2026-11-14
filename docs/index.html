@@ -76,7 +76,9 @@
   const normalizeSearch=value=>String(value??'').toLocaleLowerCase('sq').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
   const nowLocal=()=>{const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,16)};
   const specialtyData={Kardiologji:['Hipertension arterial','Sëmundje koronare iskemike','Fibrilacion atrial','Insuficiencë kardiake','Angina pectoris'],Pulmologji:['Astma bronkiale','SPOK','Pneumoni','Bronkit akut','Bronkit kronik','Alergji respiratore'],Neurologji:['Migrenë / kokëdhimbje','Sëmundja Parkinson','Skleroza multiple','Epilepsi','Insult cerebrovaskular'],Hixhame:['Ankesa muskuloskeletale e deklaruar','Dhimbje koke e deklaruar','Lodhje e deklaruar','Kërkesë për procedurë hixhame','Kontroll / ndjekje pas procedure']};
-  const USERS={
+  // Used only when docs/firebase-config.js is null. With Firebase configured, anyone in
+  // Firebase Authentication who has a role claim can sign in, and this list is ignored.
+  const LOCAL_ONLY_USERS={
     'admin@bioeng.com':{pass:'Bioeng2025',role:'Laborator',name:'Laboratori BIOENG',title:'Laborator'},
     'pulmolog@bioeng.com':{pass:'pulmolog123',role:'Pulmologji',name:'Dr. Refik Sylaj',title:'Specialist i Pulmologjisë'},
     'kardiolog@bioeng.com':{pass:'kardiolog123',role:'Kardiologji',name:'Dr. Rilind Sylaj',title:'Specialist i Kardiologjisë'},
@@ -152,30 +154,35 @@
   function waitForDataWorkflows(){return activeDataWorkflows?new Promise(resolve=>dataWorkflowWaiters.push(resolve)):Promise.resolve()}
   async function openSession(user){sessionGeneration++;const generation=sessionGeneration;currentUser=user;clearPrintedDocument();clearSessionDom();$('loginError').textContent='';$('loginCard').classList.add('hidden');$('appShell').classList.add('hidden');blankReport();$('appointmentAt').value=nowLocal();$('paymentDate').value=dateOnly();applyRole();await loadCatalog();if(!isActiveSession(generation))return;if(!currentUser.cloud)await ensureCatalogStored();if(!isActiveSession(generation))return;await renderPatients();if(!isActiveSession(generation))return;$('appShell').classList.remove('hidden');status(`Mirë se erdhët, ${currentUser.name}.`)}
   async function login(){
-    const email=$('loginEmail').value.trim().toLowerCase(),pass=$('loginPassword').value,expected=USERS[email],button=$('loginButton'),configProvided=Boolean(window.BIOENG_FIREBASE_CONFIG);
+    const email=$('loginEmail').value.trim().toLowerCase(),pass=$('loginPassword').value,button=$('loginButton'),configProvided=Boolean(window.BIOENG_FIREBASE_CONFIG);
     if(authTransitionRunning)return;
-    if(!expected){$('loginError').textContent='Emaili ose fjalëkalimi nuk është i saktë.';return}
+    if(!email||!pass){$('loginError').textContent='Shkruaj emailin dhe fjalëkalimin.';return}
     if(configProvided&&!window.BioengFirebase?.isConfigured()){$('loginError').textContent='Konfigurimi i Firebase është i paplotë. Kontakto administratorin.';return}
     authTransitionRunning=true;button.disabled=true;$('loginError').textContent='';
     try{
       if(window.BioengFirebase?.isConfigured()){
+        // Firebase Authentication is the list of users. The profile comes only from the
+        // account's custom claims, which only an administrator can set with the Admin SDK.
         try{
           if(cloudReady)await cloudReady;
           const identity=await window.BioengFirebase.signIn(email,pass);
-          if(identity.email!==email||identity.role!==expected.role||identity.name!==expected.name||identity.title!==expected.title){await window.BioengFirebase.signOut();throw Object.assign(new Error('Firebase account claims do not match this app profile.'),{code:'firebase/invalid-role',category:'permission'})}
+          // firestore.rules rejects a specialist's reports unless both name and title claims are set.
+          if(identity.email!==email||!identity.name||(identity.role!=='Laborator'&&!identity.title)){await window.BioengFirebase.signOut();throw Object.assign(new Error('The Firebase account has no complete Bioeng profile.'),{code:'firebase/invalid-role',category:'permission'})}
           await useAccountDatabase(identity.uid);clearPersistenceNotice();
-          await openSession({email,role:expected.role,name:expected.name,title:expected.title,uid:identity.uid,cloud:true});
+          await openSession({email:identity.email,role:identity.role,name:identity.name,title:identity.title,uid:identity.uid,cloud:true});
           $('securityNote').innerHTML='<strong>Shënim sigurie:</strong> të dhënat ruhen fillimisht në hapësirën lokale të kësaj llogarie dhe sinkronizohen me Firebase kur lidhja është e disponueshme.';
           authTransitionRunning=false;button.disabled=false;syncFromFirebase();return;
         }catch(error){
           const category=error?.category||window.BioengFirebase.classifyError(error);
           if(['offline','quota','unknown'].includes(category)){handleCloudError(error);$('loginError').textContent='Firebase nuk është i arritshëm. Hyrja lokale me fjalëkalime të integruara çaktivizohet pasi konfigurohet Firebase.'}
-          else $('loginError').textContent=category==='permission'?'Kjo llogari nuk ka rolin e kërkuar në Firebase.':'Emaili ose fjalëkalimi nuk është i saktë.';
+          else $('loginError').textContent=category==='permission'?'Kjo llogari nuk ka rol në Firebase. Administratori duhet t\'i caktojë rolin dhe emrin.':'Emaili ose fjalëkalimi nuk është i saktë.';
           return;
         }
       }
-      if(expected.pass!==pass){$('loginError').textContent='Emaili ose fjalëkalimi nuk është i saktë.';return}
-      await openSession({email,role:expected.role,name:expected.name,title:expected.title,cloud:false});
+      // Local-only mode (no Firebase configuration): the built-in accounts are the only users.
+      const local=LOCAL_ONLY_USERS[email];
+      if(!local||local.pass!==pass){$('loginError').textContent='Emaili ose fjalëkalimi nuk është i saktë.';return}
+      await openSession({email,role:local.role,name:local.name,title:local.title,cloud:false});
     }finally{authTransitionRunning=false;button.disabled=false}
   }
   async function logout(){if(authTransitionRunning)return;authTransitionRunning=true;logoutPending=true;const wasCloud=currentUser?.cloud,logoutButton=$('logoutButton'),loginButton=$('loginButton');logoutButton.disabled=true;loginButton.disabled=true;clearCloudRetry();clearCloudSyncRetry();if(cloudFlushTimer){clearTimeout(cloudFlushTimer);cloudFlushTimer=null}window.BioengFirebase?.stopRealtime();$('appShell').classList.add('hidden');$('loginCard').classList.add('hidden');try{await waitForDataWorkflows();sessionGeneration++;currentUser=null;activeReportId=null;if(wasCloud)await window.BioengFirebase.signOut()}finally{clearPrintedDocument();blankReport();clearSessionDom();$('loginPassword').value='';$('reportType').disabled=false;$('specialty').disabled=false;$('loginCard').classList.remove('hidden');logoutButton.disabled=false;loginButton.disabled=false;logoutPending=false;authTransitionRunning=false}}
