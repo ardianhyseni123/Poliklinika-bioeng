@@ -50,7 +50,7 @@ service cloud.firestore {
     }
 
     function isSpecialistRole(p) {
-      return p != null && p.role in ['Kardiologji', 'Pulmologji', 'Neurologji', 'Hixhame'];
+      return p != null && p.role in ['Kardiologji', 'Pulmologji', 'Neurologji', 'Gastroenterologji', 'Urologji', 'Hixhame'];
     }
 
     function hasRole(p) {
@@ -75,7 +75,7 @@ service cloud.firestore {
         && data.keys().hasAll(['email', 'role', 'name', 'title', 'active', 'updatedAt', 'updatedBy'])
         && data.keys().hasOnly(['email', 'role', 'name', 'title', 'active', 'updatedAt', 'updatedBy'])
         && data.email == email
-        && data.role in ['Administrator', 'Laborator', 'Kardiologji', 'Pulmologji', 'Neurologji', 'Hixhame']
+        && data.role in ['Administrator', 'Laborator', 'Kardiologji', 'Pulmologji', 'Neurologji', 'Gastroenterologji', 'Urologji', 'Hixhame']
         && data.name is string
         && data.name.size() > 0
         && data.name.size() <= 200
@@ -119,17 +119,52 @@ service cloud.firestore {
         && data.address is string
         && data.archived is bool
         && data.createdAt is string
-        && data.get('archivedAt', '') is string;
+        && data.get('archivedAt', '') is string
+        // The specialists the patient is assigned to. Absent on patients from before the
+        // assignment existed ("old patients"); [] means nobody but the laboratory.
+        && data.get('specialties', []) is list
+        && data.get('specialties', []).size() <= 6
+        && data.get('specialties', []).hasOnly(['Kardiologji', 'Pulmologji', 'Neurologji', 'Gastroenterologji', 'Urologji', 'Hixhame'])
+        && data.get('assignedAt', '') is string;
     }
 
-    // A specialist may only resend an already-accepted create unchanged.
+    function isOldPatient(data) {
+      return !('specialties' in data);
+    }
+
+    function assignedTo(p, data) {
+      return p.role in data.specialties;
+    }
+
+    // The laboratory sees every patient; a specialist the patients assigned to their
+    // specialty, plus old patients they have a report for. The app reads those one by one,
+    // by the patient ids of its own reports, so a specialist is allowed to read any old
+    // patient by id (ids are random UUIDs), but never to list them.
+    function canGetPatient(p, res) {
+      return isLabRole(p)
+        || (isSpecialistRole(p) && (res == null || isOldPatient(res.data) || assignedTo(p, res.data)));
+    }
+
+    // Specialist queries must filter on specialties array-contains their own specialty.
+    function canListPatients(p, data) {
+      return isLabRole(p) || (isSpecialistRole(p) && assignedTo(p, data));
+    }
+
+    // A patient a specialist registers is assigned to that specialist only.
+    function canCreatePatient(p, data) {
+      return isLabRole(p) || (isSpecialistRole(p) && data.get('specialties', null) == [p.role]);
+    }
+
+    // Only the laboratory changes a patient or its assignment. A specialist may only resend
+    // an already-accepted create unchanged.
     function canUpdatePatient(p) {
       return isLabRole(p) || (hasRole(p) && isExactReplay());
     }
 
     match /patients/{patientId} {
-      allow read: if hasRole(me());
-      allow create: if hasRole(me())
+      allow get: if canGetPatient(me(), resource);
+      allow list: if canListPatients(me(), resource.data);
+      allow create: if canCreatePatient(me(), request.resource.data)
         && validPatient(patientId, request.resource.data);
       allow update: if canUpdatePatient(me())
         && validPatient(patientId, request.resource.data);
@@ -145,7 +180,7 @@ service cloud.firestore {
           (type == 'laboratory' && specialty == 'Laborator')
           || (
             type == 'specialist'
-            && specialty in ['Kardiologji', 'Pulmologji', 'Neurologji', 'Hixhame']
+            && specialty in ['Kardiologji', 'Pulmologji', 'Neurologji', 'Gastroenterologji', 'Urologji', 'Hixhame']
           )
         );
     }
@@ -438,7 +473,7 @@ service cloud.firestore {
         && data.patientName is string
         && data.appointmentAt is string
         && data.status in ['Caktuar', 'Përfunduar', 'Anuluar', "S'u paraqit"]
-        && data.specialty in ['Laborator', 'Kardiologji', 'Pulmologji', 'Neurologji', 'Hixhame']
+        && data.specialty in ['Laborator', 'Kardiologji', 'Pulmologji', 'Neurologji', 'Gastroenterologji', 'Urologji', 'Hixhame']
         && data.clinician is string
         && data.phone is string
         && data.note is string

@@ -24,7 +24,10 @@ const markers: MarkerStore = {
   }
 };
 
-/** Opens this person's device stores, re-checks unconfirmed writes, and rescues old-app changes. */
+/**
+ * Opens this person's device stores, re-checks unconfirmed writes, and brings over the old app's
+ * attachments from this computer (the old app's held changes are not uploaded: see legacyRescue).
+ */
 export function DataProvider({ uid, profile, children }: { uid: string; profile: Profile; children: ReactNode }) {
   const [api, setApi] = useState<DataApi | null>(null);
   const { email, role, name, title } = profile;
@@ -50,7 +53,9 @@ export function DataProvider({ uid, profile, children }: { uid: string; profile:
         uid,
         attachments,
         recordFailure: (input, error) => openJournal.recordFailure(input, error),
-        markers
+        markers,
+        // Off by the clinic's decision (2026-11-14): the held reports were entered again.
+        uploadHeldChanges: false
       });
       if (!cancelled) setApi(current => (current ? { ...current, rescue } : current));
     })().catch(error => console.error('Could not open the local stores.', error));

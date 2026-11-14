@@ -1,11 +1,15 @@
 // Checklists and wording per specialty, ported from the old app.
 
 import type { Specialty } from '../auth/roles';
+import { GASTRO_TEMPLATES, SPECIALTY_EXAMS, URO_TEMPLATES, type DiagnosisTemplate } from './specialtyTemplates';
 
 export const DIAGNOSES: Record<Specialty, string[]> = {
   Kardiologji: ['Hipertension arterial', 'Sëmundje koronare iskemike', 'Fibrilacion atrial', 'Insuficiencë kardiake', 'Angina pectoris'],
   Pulmologji: ['Astma bronkiale', 'SPOK', 'Pneumoni', 'Bronkit akut', 'Bronkit kronik', 'Alergji respiratore'],
   Neurologji: ['Migrenë / kokëdhimbje', 'Sëmundja Parkinson', 'Skleroza multiple', 'Epilepsi', 'Insult cerebrovaskular'],
+  // The diagnoses of these two are the names of their templates.
+  Gastroenterologji: GASTRO_TEMPLATES.map(template => template.name),
+  Urologji: URO_TEMPLATES.map(template => template.name),
   Hixhame: ['Ankesa muskuloskeletale e deklaruar', 'Dhimbje koke e deklaruar', 'Lodhje e deklaruar', 'Kërkesë për procedurë hixhame', 'Kontroll / ndjekje pas procedure']
 };
 
@@ -44,8 +48,36 @@ export function specialtyLabels(specialty: string) {
 }
 
 export function examsFor(specialty: string): string[] {
-  return specialty === 'Hixhame' ? HIXHAME_CHECKS : EXAMS;
+  if (specialty === 'Hixhame') return HIXHAME_CHECKS;
+  return SPECIALTY_EXAMS[specialty as keyof typeof SPECIALTY_EXAMS] ?? EXAMS;
 }
+
+const TEMPLATES: Partial<Record<Specialty, DiagnosisTemplate[]>> = {
+  Gastroenterologji: GASTRO_TEMPLATES,
+  Urologji: URO_TEMPLATES
+};
+
+/** Diagnosis templates of the specialty; none for most. */
+export function templatesFor(specialty: string): DiagnosisTemplate[] {
+  return TEMPLATES[specialty as Specialty] ?? [];
+}
+
+/** What applying a template does: only adds, never unticks; the recommendations are appended once. */
+export function applyTemplate(
+  current: { diagnoses: string[]; requestedExams: string[]; therapy: string },
+  template: DiagnosisTemplate,
+  exams: string[]
+): { diagnoses: string[]; requestedExams: string[]; therapy: string } {
+  const add = (values: string[], extra: string[]) => [...values, ...extra.filter(item => !values.includes(item))];
+  const therapy = current.therapy.trim();
+  return {
+    diagnoses: add(current.diagnoses, [template.name]),
+    requestedExams: add(current.requestedExams, template.exams.filter(exam => exams.includes(exam))),
+    therapy: therapy.includes(template.therapy) ? current.therapy : [therapy, template.therapy].filter(Boolean).join('\n\n')
+  };
+}
+
+export type { DiagnosisTemplate };
 
 export function diagnosesFor(specialty: string): string[] {
   return DIAGNOSES[specialty as Specialty] ?? [];

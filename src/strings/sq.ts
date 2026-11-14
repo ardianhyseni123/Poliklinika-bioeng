@@ -48,6 +48,7 @@ export const sq = {
   },
   rescue: {
     title: 'U rikthyen ndryshime nga versioni i vjetër',
+    attachmentsTitle: 'U sollën dokumentet e versionit të vjetër',
     summary: (r: { found: number; reports: number; patients: number; conflicts: number; deletions: number; unrestored: number; attachments: number }) => {
       const n = (count: number, one: string, many: string) => (count ? `${count} ${count === 1 ? one : many}` : '');
       return [

@@ -26,7 +26,8 @@ const EXPECTED_ACCOUNT_ROLES = new Map([
   ['neurolog@bioeng.com', 'Neurologji'],
   ['hixhama@bioeng.com', 'Hixhame']
 ]);
-const ALLOWED_ROLES = new Set(EXPECTED_ACCOUNT_ROLES.values());
+// Records may also use the specialties added in the new app, which have no accounts to import.
+const ALLOWED_ROLES = new Set([...EXPECTED_ACCOUNT_ROLES.values(), 'Gastroenterologji', 'Urologji']);
 const SPECIALIST_ROLES = new Set([...ALLOWED_ROLES].filter(role => role !== 'Laborator'));
 
 class UsageError extends Error {}
@@ -200,6 +201,14 @@ function validatePatients(records, validator) {
     validator.require(isDateString(record.createdAt), `${location}.createdAt`, 'must be a date string');
     validator.require(typeof record.archived === 'boolean', `${location}.archived`, 'must be boolean');
     if (record.archivedAt !== undefined) validator.require(typeof record.archivedAt === 'string', `${location}.archivedAt`, 'must be a string');
+    // Who sees the patient (new app); absent on patients from before the assignment existed.
+    if (record.specialties !== undefined) {
+      validator.require(
+        Array.isArray(record.specialties) && record.specialties.every(item => SPECIALIST_ROLES.has(item)),
+        `${location}.specialties`,
+        'must be a list of specialties'
+      );
+    }
     validateDocumentSize(record, location, validator);
   });
 }
@@ -224,7 +233,7 @@ function validateReports(records, validator) {
       validator.require(
         SPECIALIST_ROLES.has(record.specialty),
         `${location}.specialty`,
-        'specialist reports must use Pulmologji, Kardiologji, Neurologji, or Hixhame'
+        'specialist reports must use Pulmologji, Kardiologji, Neurologji, Gastroenterologji, Urologji, or Hixhame'
       );
     }
     validator.require(isDateString(record.reportAt), `${location}.reportAt`, 'must be a date string');

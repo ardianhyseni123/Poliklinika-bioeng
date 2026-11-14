@@ -14,6 +14,7 @@ export const USERS = {
   lab: { email: 'lab@bioeng.test', role: 'Laborator', name: 'Laboratori', title: 'Laborator', active: true },
   kardio: { email: 'kardio@bioeng.test', role: 'Kardiologji', name: 'Dr. Kardio', title: 'Specialist i Kardiologjisë', active: true },
   pulmo: { email: 'pulmo@bioeng.test', role: 'Pulmologji', name: 'Dr. Pulmo', title: 'Specialist i Pulmologjisë', active: true },
+  gastro: { email: 'gastro@bioeng.test', role: 'Gastroenterologji', name: 'Dr. Gastro', title: 'Gastroenterolog', active: true },
   inactive: { email: 'inactive@bioeng.test', role: 'Kardiologji', name: 'Dr. Ish', title: 'Specialist i Kardiologjisë', active: false }
 } as const;
 export const NO_PROFILE = 'stranger@bioeng.test';

@@ -3,7 +3,7 @@ import { can, canAccessReport, type Action } from '../../src/auth/permissions';
 import { ROLES, SPECIALTIES, type Role } from '../../src/auth/roles';
 
 const ALL_ACTIONS: Action[] = [
-  'patients.create', 'patients.archive', 'reports.create', 'reports.chooseType', 'reports.anySpecialty',
+  'patients.create', 'patients.archive', 'patients.assign', 'reports.create', 'reports.chooseType', 'reports.anySpecialty',
   'appointments.manage', 'payments.manage', 'finance.view', 'catalog.edit', 'backup.export', 'users.manage'
 ];
 

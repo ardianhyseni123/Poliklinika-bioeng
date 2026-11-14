@@ -13,6 +13,7 @@ const SECTIONS = {
   'admin@bioeng.test': ['Pacienti', 'Pagesat sipas raportit', 'Terminet', 'Raport i ri', 'Raportet e pacientit', 'Analizat dhe vlerat referente', 'Kopje rezervë', 'Përdoruesit'],
   'lab@bioeng.test': ['Pacienti', 'Pagesat sipas raportit', 'Terminet', 'Raport i ri', 'Raportet e pacientit', 'Analizat dhe vlerat referente', 'Kopje rezervë'],
   'kardiolog@bioeng.test': ['Pacienti', 'Raport i ri', 'Kontrollet e Kardiologji'],
+  'gastrolog@bioeng.test': ['Pacienti', 'Raport i ri', 'Kontrollet e Gastroenterologji'],
   'hixhama@bioeng.test': ['Pacienti', 'Raport i ri', 'Kontrollet e Hixhame']
 };
 

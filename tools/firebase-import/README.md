@@ -51,9 +51,12 @@ Adding someone takes two steps:
    npm run users -- set doctor@example.com --role Kardiologji --name "Dr. Emri Mbiemri"
    ```
 
-   `--role` is one of `Laborator`, `Pulmologji`, `Kardiologji`, `Neurologji`,
-   or `Hixhame`. `--title` is optional and defaults to the role's usual title
-   (for example `Specialist i Kardiologjisë`). Running `set` again changes the
+   `--role` is one of `Administrator`, `Laborator`, `Pulmologji`, `Kardiologji`,
+   `Neurologji`, `Gastroenterologji`, `Urologji`, or `Hixhame`. Gastroenterologji
+   and Urologji exist only in the new app (`list` shows them as "old app: no (new
+   app only)"); an Administrator is a `Laborator` in the old one. `--title` is
+   optional and defaults to the role's usual title (for example
+   `Specialist i Kardiologjisë`, `Gastroenterolog`, `Urolog`). Running `set` again changes the
    role, name, or title; the user then signs out and in again.
 
 To see every user and whether it can use each app:
@@ -84,7 +87,9 @@ Dry-run validation checks the backup format/version, UUID record/document IDs,
 duplicate IDs, required references, estimated Firestore document sizes, and
 attachment MIME types, declared sizes, and data URLs. It also enforces the app's
 exact report matrix: `laboratory` means `Laborator`, while `specialist` means one
-of `Pulmologji`, `Kardiologji`, `Neurologji`, or `Hixhame`. Historical
+of `Pulmologji`, `Kardiologji`, `Neurologji`, `Gastroenterologji`, `Urologji`, or
+`Hixhame`. A patient's `specialties` (who sees it in the new app), when present, must
+list only those specialties. Historical
 payment/audit references to deleted reports are reported as aggregate warnings
 and preserved. No patient values are printed.
 

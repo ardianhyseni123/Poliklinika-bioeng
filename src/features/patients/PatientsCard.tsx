@@ -1,8 +1,10 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { can } from '../../auth/permissions';
+import { SPECIALTIES } from '../../auth/roles';
 import { useData } from '../../data/DataProvider';
-import { createPatient, patientName, setPatientArchived } from '../../data/patients';
+import { assignPatient, createPatient, patientName, setPatientArchived } from '../../data/patients';
 import type { Patient } from '../../data/schemas';
+import { assignmentSummary, isOldPatient, patientSpecialties } from '../../domain/assignment';
 import { normalizeSearch } from '../../domain/text';
 import { useWorkspace } from '../workspace/Workspace';
 
@@ -20,12 +22,66 @@ export function workingList(patients: Patient[]): Patient[] {
       || `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`));
 }
 
+function SpecialtyChecks({ values, onChange, testId }: { values: string[]; onChange: (next: string[]) => void; testId: string }) {
+  return (
+    <div className="checks compact" data-testid={testId}>
+      {SPECIALTIES.map(specialty => (
+        <label key={specialty}>
+          <input
+            type="checkbox"
+            checked={values.includes(specialty)}
+            onChange={event => onChange(event.target.checked ? [...values, specialty] : values.filter(value => value !== specialty))}
+          />
+          {specialty}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/** «Specialistët e pacientit»: the laboratory decides which specialists see the selected patient. */
+function AssignPanel({ patient, current }: { patient: Patient | null; current: string[] }) {
+  const { ctx } = useData();
+  const { say } = useWorkspace();
+  const [chosen, setChosen] = useState(current);
+
+  function save() {
+    if (!patient) {
+      say('Zgjidh pacientin para caktimit.', true);
+      return;
+    }
+    try {
+      assignPatient(ctx, patient, chosen);
+      say(assignmentSummary(chosen));
+    } catch (error) {
+      console.error(error);
+      say('Caktimi nuk u ruajt.', true);
+    }
+  }
+
+  return (
+    <div className="service-card" data-testid="assign-panel">
+      <h3>Specialistët e pacientit</h3>
+      <p className="muted">Specialisti sheh vetëm pacientët që i janë caktuar nga laboratori ose që i ka regjistruar vetë. Zgjidh pacientin, shëno specialistët dhe kliko “Ruaj caktimin”.</p>
+      <SpecialtyChecks values={chosen} onChange={setChosen} testId="patient-specialists" />
+      <div className="row">
+        <button type="button" className="secondary" disabled={!patient} onClick={save}>Ruaj caktimin</button>
+        <span className="muted" data-testid="assign-info">
+          {patient && isOldPatient(patient) ? 'Pacient i vjetër: shfaqet te specialistët që kanë raporte. Ruaje caktimin për ta fiksuar.' : ''}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function PatientsCard() {
   const { ctx } = useData();
   const { data, patientId, selectPatient, say } = useWorkspace();
   const [search, setSearch] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
   const [formOpen, setFormOpen] = useState(false);
+  const [newSpecialties, setNewSpecialties] = useState<string[]>([]);
+  const assigns = can(ctx.actor, 'patients.assign');
 
   const all = useMemo(() => workingList(data.patients.items), [data.patients.items]);
   const term = normalizeSearch(search.trim());
@@ -33,6 +89,7 @@ export function PatientsCard() {
     ? all.filter(patient => normalizeSearch(patientName(patient)).includes(term) || normalizeSearch(patient.phone).includes(term))
     : all;
   const selected = data.patients.items.find(patient => patient.id === patientId) ?? null;
+  const selectedSpecialties = selected && assigns ? patientSpecialties(selected, data.activeReports) : [];
 
   function save(event: FormEvent) {
     event.preventDefault();
@@ -41,8 +98,9 @@ export function PatientsCard() {
       return;
     }
     try {
-      const { record } = createPatient(ctx, form);
+      const { record } = createPatient(ctx, { ...form, specialties: newSpecialties });
       setForm(EMPTY_FORM);
+      setNewSpecialties([]);
       setFormOpen(false);
       setSearch('');
       selectPatient(record.id);
@@ -87,6 +145,7 @@ export function PatientsCard() {
           <span className="muted">{search.trim() ? `${shown.length} pacient${shown.length === 1 ? ' u gjet' : 'ë u gjetën'}.` : ''}</span>
         </label>
       </div>
+      {assigns && <AssignPanel key={`${selected?.id ?? ''}|${selectedSpecialties.join(',')}`} patient={selected} current={selectedSpecialties} />}
       {can(ctx.actor, 'patients.archive') && (
         <div className="row">
           <button type="button" className="danger" onClick={archive}>Hiq pacientin nga lista</button>
@@ -112,6 +171,12 @@ export function PatientsCard() {
             <label>Telefoni<input inputMode="tel" {...field('phone')} /></label>
             <label>Adresa<input {...field('address')} /></label>
           </div>
+          {assigns && (
+            <div style={{ marginTop: 12 }}>
+              <strong>Cakto specialistit (opsionale)</strong>
+              <SpecialtyChecks values={newSpecialties} onChange={setNewSpecialties} testId="new-patient-specialists" />
+            </div>
+          )}
           <button type="submit">Ruaj pacientin</button>
         </form>
       </details>

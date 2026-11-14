@@ -6,6 +6,7 @@ import { isLabRole, isSpecialty, type Profile, type Role } from './roles';
 export type Action =
   | 'patients.create'
   | 'patients.archive'
+  | 'patients.assign'
   | 'reports.create'
   | 'reports.chooseType'
   | 'reports.anySpecialty'
@@ -19,6 +20,7 @@ export type Action =
 const LAB_ACTIONS: ReadonlySet<Action> = new Set<Action>([
   'patients.create',
   'patients.archive',
+  'patients.assign',
   'reports.create',
   'reports.chooseType',
   'reports.anySpecialty',

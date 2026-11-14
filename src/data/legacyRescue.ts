@@ -11,6 +11,12 @@
 //   goes into the write journal as failed, with its content, for a person to recover.
 // It needs a connection to compare with the server; offline it stops and tries again at the
 // next login. The old database is left in place for 30 days, then deleted.
+//
+// The upload is OFF (decided by the clinic on 2026-11-14): the doctors entered those reports
+// again, so uploading the held copies would duplicate them. What still happens at the first
+// login on a computer: the old app's attachments, which exist only on that computer, are copied
+// into the new app's store, and 30 days later the old database is deleted. Turning the upload
+// back on (uploadHeldChanges) within those 30 days would still find the held changes.
 
 import { doc, getDocFromServer, type DocumentSnapshot } from 'firebase/firestore';
 import { isLabRole } from '../auth/roles';
@@ -83,6 +89,8 @@ export interface RescueDeps {
   recordFailure(input: TrackInput, error: string): void;
   markers: MarkerStore;
   now?: () => Date;
+  /** Upload the changes the old app held back. Off in the app; see the note at the top. */
+  uploadHeldChanges?: boolean;
 }
 
 class Offline extends Error {}
@@ -101,7 +109,9 @@ function priority(mutation: LegacyMutation): number {
 
 export async function rescueLegacyChanges(deps: RescueDeps): Promise<RescueSummary> {
   const name = legacyDatabaseName(deps.uid);
-  const markerKey = `bioeng-legacy-rescue:${name}`;
+  const upload = deps.uploadHeldChanges === true;
+  // Separate markers, so that turning the upload on later still runs it once.
+  const markerKey = upload ? `bioeng-legacy-rescue:${name}` : `bioeng-legacy-attachments:${name}`;
   const now = deps.now ?? (() => new Date());
 
   const marker = deps.markers.getItem(markerKey);
@@ -131,7 +141,7 @@ export async function rescueLegacyChanges(deps: RescueDeps): Promise<RescueSumma
       }
     }
 
-    const mutations = stores.contains('syncQueue')
+    const mutations = upload && stores.contains('syncQueue')
       ? (await getAll<LegacyMutation>(legacy, 'syncQueue'))
           .filter(item => !item.queuedByEmail || item.queuedByEmail.toLowerCase() === deps.ctx.actor.email)
           .filter(item => ['patients', 'reports', 'appointments', 'payments', 'audit'].includes(item.store))
@@ -242,8 +252,13 @@ async function replay(deps: RescueDeps, mutation: LegacyMutation, summary: Rescu
   }
 
   if (mutation.store === 'patients') {
-    const server = await serverDoc(deps, path);
-    if (server.exists()) summary.alreadyOnServer += 1;
+    // A specialist may not read a patient that is assigned to others: it exists, so it is
+    // already on the server.
+    const server = await serverDoc(deps, path).catch((error: unknown) => {
+      if (!lab && errorCode(error) === 'permission-denied') return null;
+      throw error;
+    });
+    if (!server || server.exists()) summary.alreadyOnServer += 1;
     else {
       restorePatient(ctx, value);
       summary.patients += 1;

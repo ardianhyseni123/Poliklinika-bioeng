@@ -5,7 +5,7 @@ import { useData } from '../../data/DataProvider';
 import { patientName } from '../../data/patients';
 import { saveReport, type ReportDraft } from '../../data/reports';
 import { isTombstone, type AnalysisItem, type Report, type ReportSpecialty, type ReportType } from '../../data/schemas';
-import { diagnosesFor, examsFor, specialtyLabels } from '../../domain/specialties';
+import { applyTemplate, diagnosesFor, examsFor, specialtyLabels, templatesFor, type DiagnosisTemplate } from '../../domain/specialties';
 import { formatDateTime, nowLocal } from '../../domain/text';
 import { AttachmentProblem, MAX_ATTACHMENT_BYTES, type AttachmentInfo } from '../../local/attachments';
 import { useWorkspace } from '../workspace/Workspace';
@@ -67,6 +67,42 @@ function Checks({ options, values, onChange }: { options: string[]; values: stri
         </label>
       ))}
     </div>
+  );
+}
+
+/** Gastroenterologji and Urologji: pick a diagnosis template and apply it to the form. */
+function TemplatePanel({ specialty, onApply, say }: { specialty: string; onApply: (template: DiagnosisTemplate) => void; say: (message: string, error?: boolean) => void }) {
+  const templates = templatesFor(specialty);
+  const [index, setIndex] = useState('');
+  const template = index === '' ? null : templates[Number(index)] ?? null;
+
+  function apply() {
+    if (!template) {
+      say('Zgjidh një shabllon diagnoze.', true);
+      return;
+    }
+    onApply(template);
+    say(`Shablloni “${template.name}” u aplikua. Kontrolloje dhe plotësoje para ruajtjes.`);
+  }
+
+  return (
+    <section className="service-card" data-testid="specialty-templates">
+      <h3>Shabllone diagnozash — {specialty}</h3>
+      <p className="muted">Zgjidh një shabllon dhe kliko “Apliko shabllonin”: diagnoza shënohet, ekzaminimet e sugjeruara zgjidhen dhe rekomandimet shtohen te terapia. Mjeku mund t’i ndryshojë lirisht të gjitha para ruajtjes; terapinë medikamentoze e shton vetë mjeku.</p>
+      <div className="row">
+        <label className="grow">
+          Shablloni
+          <select value={index} onChange={event => setIndex(event.target.value)}>
+            <option value="">— Zgjidh shabllonin e diagnozës —</option>
+            {templates.map((item, i) => <option key={item.name} value={String(i)}>{item.name}</option>)}
+          </select>
+        </label>
+        <button type="button" onClick={apply}>Apliko shabllonin</button>
+      </div>
+      <div className="muted" style={{ marginTop: 8, whiteSpace: 'pre-line' }}>
+        {template ? `Ekzaminime të sugjeruara: ${template.exams.join(', ')}\n${template.therapy}` : ''}
+      </div>
+    </section>
   );
 }
 
@@ -224,6 +260,14 @@ function ReportForm() {
           <label>Anamneza dhe ankesat<textarea rows={3} value={form.anamnesis} onChange={event => set({ anamnesis: event.target.value })} /></label>
           <label>Ekzaminimi fizik<textarea rows={3} value={form.physicalExam} onChange={event => set({ physicalExam: event.target.value })} /></label>
           <label>Rezultate ekzistuese<textarea rows={3} value={form.existingResults} onChange={event => set({ existingResults: event.target.value })} /></label>
+          {templatesFor(form.specialty).length > 0 && (
+            <TemplatePanel
+              key={form.specialty}
+              specialty={form.specialty}
+              say={say}
+              onApply={template => setForm(current => ({ ...current, ...applyTemplate(current, template, examsFor(current.specialty)) }))}
+            />
+          )}
           <h3>{labels.diagnosisHeading}</h3>
           <Checks options={diagnosesFor(form.specialty)} values={form.diagnoses} onChange={diagnoses => set({ diagnoses })} />
           <label>{labels.customDiagnoses}<textarea rows={2} value={form.customDiagnoses} onChange={event => set({ customDiagnoses: event.target.value })} /></label>

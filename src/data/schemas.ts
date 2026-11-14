@@ -41,7 +41,10 @@ export const PatientSchema = z.looseObject({
   address: z.string(),
   archived: z.boolean(),
   createdAt: z.string(),
-  archivedAt: z.string().optional()
+  archivedAt: z.string().optional(),
+  // Absent on patients from before the assignment existed; [] means the laboratory only.
+  specialties: z.array(z.enum(SPECIALTIES)).max(SPECIALTIES.length).optional(),
+  assignedAt: z.string().optional()
 });
 export type Patient = z.infer<typeof PatientSchema>;
 

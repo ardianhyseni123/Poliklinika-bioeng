@@ -61,7 +61,7 @@ export function RescueNotice() {
   if (!rescue || hidden || rescue.status !== 'done' || (rescue.found === 0 && rescue.attachments === 0)) return null;
   return (
     <section className="card no-print" role="status" data-testid="rescue-notice">
-      <strong>{sq.rescue.title}</strong>
+      <strong>{rescue.found ? sq.rescue.title : sq.rescue.attachmentsTitle}</strong>
       <p>{sq.rescue.summary(rescue)}</p>
       <button type="button" className="secondary" onClick={() => setHidden(true)}>{sq.rescue.ok}</button>
     </section>

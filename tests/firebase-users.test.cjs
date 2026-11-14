@@ -23,7 +23,7 @@ test('the user tool knows the roles of both apps', async () => {
     assert.match(roles, new RegExp(`'${role}'`));
     assert.match(rules, new RegExp(`'${role}'`));
   }
-  assert.deepEqual(ROLES.filter(role => !OLD_APP_ROLES.includes(role)), ['Administrator']);
+  assert.deepEqual(ROLES.filter(role => !OLD_APP_ROLES.includes(role)), ['Administrator', 'Gastroenterologji', 'Urologji']);
 });
 
 test('set requires a known role and a name, and normalizes the email', async () => {
@@ -83,6 +83,7 @@ test('list reports access to each app with the same checks as its sign-in', asyn
   assert.equal(appAccess({ customClaims: { role: 'Laborator' }, displayName: 'L' }), 'yes');
   assert.equal(appAccess({ customClaims: {} }), 'no (no role)');
   assert.equal(appAccess({ customClaims: { role: 'Administrator', name: 'A' } }), 'no (no role)');
+  assert.equal(appAccess({ customClaims: { role: 'Urologji', name: 'Dr. U', title: 'Urolog' } }), 'no (new app only)');
   assert.equal(appAccess({ customClaims: { role: 'Laborator' } }), 'no (no name)');
   assert.equal(appAccess({ customClaims: { role: 'Kardiologji', name: 'Dr. K' } }), 'no (no title)');
   assert.equal(appAccess({ disabled: true, customClaims: { role: 'Laborator', name: 'L' } }), 'no (disabled)');

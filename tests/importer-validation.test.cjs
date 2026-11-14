@@ -142,7 +142,7 @@ test('importer accepts only the exact laboratory and specialist report classific
   ]));
   assert.notEqual(invalid.status, 0);
   assert.match(invalid.stderr, /laboratory reports must use specialty Laborator/);
-  assert.match(invalid.stderr, /specialist reports must use Pulmologji, Kardiologji, Neurologji, or Hixhame/);
+  assert.match(invalid.stderr, /specialist reports must use Pulmologji, Kardiologji, Neurologji, Gastroenterologji, Urologji, or Hixhame/);
 });
 
 test('account validation requires exactly the five app email-to-role mappings', () => {

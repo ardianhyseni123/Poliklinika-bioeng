@@ -57,7 +57,39 @@ function memoryMarkers(): MarkerStore {
   return { getItem: key => values.get(key) ?? null, setItem: (key, value) => { values.set(key, value); } };
 }
 
-describe('rescue of changes held by the old app', () => {
+describe('the old app on this computer, as the app handles it now', () => {
+  test('nothing it held back is uploaded; its attachments come over; it is deleted after 30 days', async () => {
+    const uid = `uid-kardio-${uniqueSuffix()}`;
+    const heldPatient = patient();
+    const heldReport = oldReport({ patientId: heldPatient.id, anamnesis: 'Raport i futur sërish nga mjeku' });
+    await createLegacyDatabase(uid, [
+      held('patients', 'put', heldPatient),
+      held('reports', 'put', heldReport, { expectedRevision: 0 })
+    ], [
+      { id: id(), reportId: id(), name: 'eho.png', type: 'image/png', size: 3, uploadedAt: NOW, blob: new Blob(['png'], { type: 'image/png' }) }
+    ]);
+    const attachments = await AttachmentStore.open(USERS.kardio.email);
+    const markers = memoryMarkers();
+    const run = (extra: { uploadHeldChanges?: boolean; now?: () => Date } = {}) =>
+      rescueLegacyChanges({ ctx: device(env, 'kardio'), uid, attachments, recordFailure: () => undefined, markers, ...extra });
+
+    expect(await run()).toMatchObject({ status: 'done', found: 0, reports: 0, patients: 0, attachments: 1 });
+    expect(await serverRead(env, `reports/${heldReport.id}`)).toBeUndefined();
+    expect(await serverRead(env, `patients/${heldPatient.id}`)).toBeUndefined();
+    expect((await run()).status).toBe('alreadyDone');
+
+    // Within the 30 days, turning the upload back on would still find the held changes.
+    expect(await run({ uploadHeldChanges: true })).toMatchObject({ status: 'done', found: 2, reports: 1, patients: 1 });
+    await expect.poll(() => serverRead(env, `reports/${heldReport.id}`)).toBeDefined();
+
+    // After 30 days the old database is removed from the computer.
+    await run({ now: () => new Date(Date.now() + 31 * 86_400_000) });
+    await expect.poll(async () => (await indexedDB.databases()).some(item => item.name === legacyDatabaseName(uid))).toBe(false);
+    attachments.close();
+  });
+});
+
+describe('rescue of changes held by the old app (switched off in the app; kept working)', () => {
   test('held reports, patients and attachments reach the server; edits that raced are kept as conflicts', async () => {
     const uid = `uid-kardio-${uniqueSuffix()}`;
     const newPatient = patient();
@@ -90,7 +122,7 @@ describe('rescue of changes held by the old app', () => {
     const ctx = device(env, 'kardio', journal);
     const attachments = await AttachmentStore.open(USERS.kardio.email);
     const markers = memoryMarkers();
-    const summary = await rescueLegacyChanges({ ctx, uid, attachments, recordFailure: (input, error) => journal.recordFailure(input, error), markers });
+    const summary = await rescueLegacyChanges({ ctx, uid, attachments, recordFailure: (input, error) => journal.recordFailure(input, error), markers, uploadHeldChanges: true });
 
     expect(summary).toMatchObject({
       status: 'done', found: 6, patients: 1, reports: 2, conflicts: 1, deletions: 1, audit: 1, unrestored: 0, attachments: 1
@@ -98,6 +130,8 @@ describe('rescue of changes held by the old app', () => {
 
     // Everything reaches the server.
     await expect.poll(() => serverRead(env, `patients/${newPatient.id}`)).toBeDefined();
+    // A patient the doctor registered is assigned to the doctor, as a new one would be.
+    expect((await serverRead<{ specialties?: string[] }>(env, `patients/${newPatient.id}`))?.specialties).toEqual(['Kardiologji']);
     await expect.poll(async () => (await serverRead<Report>(env, `reports/${neverSynced.id}`))?.anamnesis).toBe('Raport që mbeti në kompjuter');
     await expect.poll(async () => (await serverRead<Report>(env, `reports/${untouched.id}`))?.notes).toBe('Shënim offline');
     await expect.poll(async () => (await serverRead<Record<string, unknown>>(env, `reports/${toDelete.id}`))?._deleted).toBe(true);
@@ -114,7 +148,7 @@ describe('rescue of changes held by the old app', () => {
     expect((await attachments.list(neverSynced.id)).map(item => item.name)).toEqual(['ekg.pdf']);
 
     // Running again does nothing.
-    expect((await rescueLegacyChanges({ ctx, uid, attachments, recordFailure: () => undefined, markers })).status).toBe('alreadyDone');
+    expect((await rescueLegacyChanges({ ctx, uid, attachments, recordFailure: () => undefined, markers, uploadHeldChanges: true })).status).toBe('alreadyDone');
     attachments.close();
   });
 
@@ -129,10 +163,26 @@ describe('rescue of changes held by the old app', () => {
     const journal = await Journal.open(`kardio-${uniqueSuffix()}@bioeng.test`);
     const attachments = await AttachmentStore.open(USERS.kardio.email);
     const summary = await rescueLegacyChanges({
-      ctx: device(env, 'kardio', journal), uid, attachments, recordFailure: (input, error) => journal.recordFailure(input, error), markers: memoryMarkers()
+      ctx: device(env, 'kardio', journal), uid, attachments, recordFailure: (input, error) => journal.recordFailure(input, error), markers: memoryMarkers(), uploadHeldChanges: true
     });
     expect(summary).toMatchObject({ status: 'done', unrestored: 1, reports: 0 });
     expect(journal.failed()[0]).toMatchObject({ error: 'deleted-on-server', content: { therapy: 'Terapi e rëndësishme' } });
+    attachments.close();
+  });
+
+  test('a held patient that is already on the server, assigned to others, is left as it is', async () => {
+    const uid = `uid-kardio-${uniqueSuffix()}`;
+    const onServer = patient(id(), { specialties: ['Pulmologji'], assignedAt: NOW });
+    await seed(env, { [`patients/${onServer.id}`]: onServer });
+    const asTheOldAppHadIt = patient(onServer.id); // same patient, no assignment
+    await createLegacyDatabase(uid, [held('patients', 'put', asTheOldAppHadIt)]);
+
+    const attachments = await AttachmentStore.open(USERS.kardio.email);
+    const summary = await rescueLegacyChanges({
+      ctx: device(env, 'kardio'), uid, attachments, recordFailure: () => undefined, markers: memoryMarkers(), uploadHeldChanges: true
+    });
+    expect(summary).toMatchObject({ status: 'done', alreadyOnServer: 1, patients: 0 });
+    expect((await serverRead<{ specialties?: string[] }>(env, `patients/${onServer.id}`))?.specialties).toEqual(['Pulmologji']);
     attachments.close();
   });
 

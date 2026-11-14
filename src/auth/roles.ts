@@ -1,7 +1,8 @@
 // Roles must match firestore.v2.rules.
 
 export const LAB_ROLES = ['Administrator', 'Laborator'] as const;
-export const SPECIALTIES = ['Kardiologji', 'Pulmologji', 'Neurologji', 'Hixhame'] as const;
+// The order of the specialty lists in the app (the V28 order).
+export const SPECIALTIES = ['Kardiologji', 'Pulmologji', 'Neurologji', 'Gastroenterologji', 'Urologji', 'Hixhame'] as const;
 export const ROLES = [...LAB_ROLES, ...SPECIALTIES] as const;
 
 export type LabRole = (typeof LAB_ROLES)[number];
@@ -25,6 +26,8 @@ export const DEFAULT_TITLES: Record<Role, string> = {
   Kardiologji: 'Specialist i Kardiologjisë',
   Pulmologji: 'Specialist i Pulmologjisë',
   Neurologji: 'Specialist i Neurologjisë',
+  Gastroenterologji: 'Gastroenterolog',
+  Urologji: 'Urolog',
   Hixhame: 'Njësia e Hixhames'
 };
 

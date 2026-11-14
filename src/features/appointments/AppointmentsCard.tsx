@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { isSpecialty, SPECIALTIES as SPECIALIST_SPECIALTIES } from '../../auth/roles';
 import { useData } from '../../data/DataProvider';
 import { createAppointment, updateAppointment } from '../../data/appointments';
-import { patientName } from '../../data/patients';
+import { addPatientSpecialty, patientName } from '../../data/patients';
 import { APPOINTMENT_STATUSES, type Appointment } from '../../data/schemas';
+import { patientSpecialties } from '../../domain/assignment';
 import { nowLocal, showDateTime } from '../../domain/text';
 import { patientOptionLabel, workingList } from '../patients/PatientsCard';
 import { useWorkspace } from '../workspace/Workspace';
 
-const SPECIALTIES = ['Laborator', 'Kardiologji', 'Pulmologji', 'Neurologji', 'Hixhame'] as const;
+const SPECIALTIES = ['Laborator', ...SPECIALIST_SPECIALTIES] as const;
 const EXPIRE_AFTER_MS = 4 * 60 * 60 * 1000;
 
 const emptyForm = () => ({ patientId: '', specialty: 'Laborator' as Appointment['specialty'], appointmentAt: nowLocal(), status: 'Caktuar' as Appointment['status'], clinician: '', phone: '', note: '' });
@@ -56,6 +58,8 @@ export function AppointmentsCard() {
       phone: form.phone.trim(),
       note: form.note.trim()
     });
+    // A specialist appointment also lets that specialist see the patient.
+    if (isSpecialty(form.specialty)) addPatientSpecialty(ctx, patient, patientSpecialties(patient, data.activeReports), form.specialty);
     setForm({ ...emptyForm(), patientId: patient.id });
     say('Termini u ruajt.');
   }

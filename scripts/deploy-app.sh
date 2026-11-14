@@ -98,7 +98,7 @@ cutover_checklist() {
   confirm "Did 'npm run users -- migrate --commit' run, and does 'npm run users -- list' show everyone with 'new app: yes'?" || fail "Do that first (tools/firebase-import/README.md)."
   confirm "Are you an Administrator in the new app (npm run users -- set <you> --role Administrator ...)?" || fail "Make yourself Administrator first, or nobody can change roles in the app."
   confirm "Is public sign-up turned off (Authentication → Settings → User actions → no 'Enable create')?" || fail "Turn it off first: $CONSOLE/authentication/settings"
-  confirm "Will staff use the same address as before ($LIVE_URL)? Held reports are only found there." || fail "See CUTOVER.md: the rescue only works on the address the old app ran on."
+  confirm "Will staff use the same address as before ($LIVE_URL)? The old app's attachments are only found there." || fail "See CUTOVER.md: attachments are only brought over on the address the old app ran on."
   confirm "Have staff closed the app (a quiet time)?" || fail "Pick a quiet time and ask staff to close the app."
 }
 
@@ -136,8 +136,8 @@ deploy() {
     ok "Wrote $MARKER: the old ./deploy.sh now refuses to run. Commit it with the rest."
     step "Right after the switch (CUTOVER.md, part 3)"
     info "1. Open $LIVE_URL, reload, log in as yourself; check the Users page."
-    info "2. Each person logs in on every computer they used, doctors first: held reports upload by themselves."
-    info "3. Watch for the yellow notices («U rikthyen ndryshime…», «nuk u pranuan»)."
+    info "2. Each person logs in on every computer they used: their attachments come over (held reports are not uploaded)."
+    info "3. Watch for the yellow notice «nuk u pranuan»; then assign patients to the doctors («Specialistët e pacientit»)."
   fi
 }
 

@@ -22,12 +22,15 @@ export const SIGNATURES = {
   ]
 } satisfies Record<string, [Signature, Signature]>;
 
-/** Neurology reports always print this doctor, whatever the report stored. */
-export const NEUROLOGY_SIGNATURE = { name: 'Dr. Nezir Demiolli', title: 'Specialist i Neurologjisë' };
+/** These specialties always print their doctor, whatever the report stored. */
+export const FIXED_CLINICIANS: Partial<Record<string, { name: string; title: string }>> = {
+  Neurologji: { name: 'Dr. Nezir Demiolli', title: 'Specialist i Neurologjisë' },
+  Gastroenterologji: { name: 'Dr. Shqiprim Aliu', title: 'Gastroenterolog' },
+  Urologji: { name: 'Dr. Agron Uruqi', title: 'Urolog' }
+};
 
 export function printedClinician(report: Pick<Report, 'specialty' | 'clinician' | 'clinicianTitle'>): { name: string; title: string } {
-  if (report.specialty === 'Neurologji') return NEUROLOGY_SIGNATURE;
-  return { name: report.clinician || '—', title: report.clinicianTitle || report.specialty };
+  return FIXED_CLINICIANS[report.specialty] ?? { name: report.clinician || '—', title: report.clinicianTitle || report.specialty };
 }
 
 /** The two signature cells; an empty left cell for specialist reports. */

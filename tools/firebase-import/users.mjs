@@ -18,12 +18,17 @@ export const DEFAULT_TITLES = new Map([
   ['Pulmologji', 'Specialist i Pulmologjisë'],
   ['Kardiologji', 'Specialist i Kardiologjisë'],
   ['Neurologji', 'Specialist i Neurologjisë'],
+  ['Gastroenterologji', 'Gastroenterolog'],
+  ['Urologji', 'Urolog'],
   ['Hixhame', 'Njësia e Hixhames']
 ]);
 /** Roles of the new app (src/auth/roles.ts, firestore.v2.rules). */
 export const ROLES = [...DEFAULT_TITLES.keys()];
-/** Roles the old app accepts in claims (VALID_ROLES in docs/firebase-sync.js). */
-export const OLD_APP_ROLES = ROLES.filter(role => role !== 'Administrator');
+/**
+ * Roles the old app accepts in claims (VALID_ROLES in docs/firebase-sync.js). It knows neither
+ * Administrator nor Gastroenterologji and Urologji, which exist only in the new app.
+ */
+export const OLD_APP_ROLES = ['Laborator', 'Pulmologji', 'Kardiologji', 'Neurologji', 'Hixhame'];
 const LAB_ROLES = ['Administrator', 'Laborator'];
 const PROFILE_CLAIMS = ['role', 'name', 'title'];
 const TOOL_AUTHOR = 'admin-tool';
@@ -154,6 +159,7 @@ export function profileFromClaims(user) {
 export function appAccess(user) {
   const claims = user.customClaims || {};
   if (user.disabled) return 'no (disabled)';
+  if (ROLES.includes(claims.role) && !OLD_APP_ROLES.includes(claims.role) && claims.role !== 'Administrator') return 'no (new app only)';
   if (!OLD_APP_ROLES.includes(claims.role)) return 'no (no role)';
   if (!String(claims.name || user.displayName || '')) return 'no (no name)';
   if (claims.role !== 'Laborator' && !String(claims.title || '')) return 'no (no title)';

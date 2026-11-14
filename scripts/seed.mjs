@@ -28,6 +28,8 @@ const USERS = [
   { email: 'kardiolog@bioeng.test', role: 'Kardiologji', name: 'Dr. Test Kardio', title: 'Specialist i Kardiologjisë', active: true },
   { email: 'pulmolog@bioeng.test', role: 'Pulmologji', name: 'Dr. Test Pulmo', title: 'Specialist i Pulmologjisë', active: true },
   { email: 'neurolog@bioeng.test', role: 'Neurologji', name: 'Dr. Test Neuro', title: 'Specialist i Neurologjisë', active: true },
+  { email: 'gastrolog@bioeng.test', role: 'Gastroenterologji', name: 'Dr. Test Gastro', title: 'Gastroenterolog', active: true },
+  { email: 'urolog@bioeng.test', role: 'Urologji', name: 'Dr. Test Uro', title: 'Urolog', active: true },
   { email: 'hixhama@bioeng.test', role: 'Hixhame', name: 'Njësia Hixhame (test)', title: 'Njësia e Hixhames', active: true },
   { email: 'joaktiv@bioeng.test', role: 'Kardiologji', name: 'Dr. Joaktiv', title: 'Specialist i Kardiologjisë', active: false }
 ];
@@ -50,13 +52,19 @@ for (const user of USERS) {
 }
 for (const email of WITHOUT_PROFILE) await ensureAccount(email, 'Pa rol');
 
+// The first four are "old" patients, as in production: no assignment yet, so a specialist sees
+// them only through a report of their own (Blerim: Kardiologji, Drita: Hixhame). The last two
+// are assigned: Gentiana to Gastroenterologji and Urologji, Ilir to nobody (laboratory only).
 const patients = [
   ['Arta', 'Krasniqi', '1985-03-12', 'Femër', '044111222', 'Prishtinë'],
   ['Blerim', 'Gashi', '1972-11-02', 'Mashkull', '045333444', 'Ferizaj'],
   ['Drita', 'Berisha', '1990-07-21', 'Femër', '049555666', 'Pejë'],
-  ['Fatmir', 'Hoxha', '1965-01-30', 'Mashkull', '044777888', 'Gjilan']
-].map(([firstName, lastName, dob, gender, phone, address]) => ({
-  id: randomUUID(), firstName, lastName, dob, gender, phone, address, archived: false, createdAt: NOW
+  ['Fatmir', 'Hoxha', '1965-01-30', 'Mashkull', '044777888', 'Gjilan'],
+  ['Gentiana', 'Rexhepi', '1978-05-09', 'Femër', '044999000', 'Prizren', ['Gastroenterologji', 'Urologji']],
+  ['Ilir', 'Morina', '1983-09-17', 'Mashkull', '045121212', 'Mitrovicë', []]
+].map(([firstName, lastName, dob, gender, phone, address, specialties]) => ({
+  id: randomUUID(), firstName, lastName, dob, gender, phone, address, archived: false, createdAt: NOW,
+  ...(specialties ? { specialties, assignedAt: NOW } : {})
 }));
 for (const patient of patients) await db.doc(`patients/${patient.id}`).set(patient);
 

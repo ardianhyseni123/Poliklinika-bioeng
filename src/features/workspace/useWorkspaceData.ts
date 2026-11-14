@@ -1,13 +1,14 @@
 // The live data the workspace sections share, scoped to the signed-in person's role.
 
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import type { Unsubscribe } from 'firebase/firestore';
+import type { Firestore, Unsubscribe } from 'firebase/firestore';
 import { can } from '../../auth/permissions';
+import { isSpecialty } from '../../auth/roles';
 import { useData } from '../../data/DataProvider';
 import { watchAppointments } from '../../data/appointments';
 import { saveCatalog, watchCatalog, watchCatalogHistory } from '../../data/catalog';
 import type { Snapshot } from '../../data/context';
-import { watchPatients } from '../../data/patients';
+import { watchPatient, watchPatients } from '../../data/patients';
 import { watchPayments } from '../../data/payments';
 import { watchReports, watchVersions } from '../../data/reports';
 import {
@@ -23,9 +24,10 @@ import {
   type Version
 } from '../../data/schemas';
 import { watchUsers } from '../../data/users';
+import { isOldPatient } from '../../domain/assignment';
 import { buildSeedCategories, countAnalyses } from '../../domain/catalog';
 import { findConflict, type Conflict } from '../../domain/history';
-import { useLive } from '../live';
+import { useLive, type Live } from '../live';
 
 export function useWorkspaceData() {
   const { ctx } = useData();
@@ -34,7 +36,9 @@ export function useWorkspaceData() {
   const lab = can(actor, 'payments.manage');
   const editsCatalog = can(actor, 'catalog.edit');
 
-  const patients = useLive<Patient>(`${who}|patients`, (onData, onError) => watchPatients(db, onData, onError));
+  const specialist = isSpecialty(actor.role);
+
+  const assigned = useLive<Patient>(`${who}|patients`, (onData, onError) => watchPatients(db, actor, onData, onError));
   const reports = useLive<ReportHead>(`${who}|reports`, (onData, onError) => watchReports(db, actor, onData, onError));
   const appointments = useLive<Appointment>(lab ? `${who}|appointments` : null, (onData, onError) => watchAppointments(db, onData, onError));
   const payments = useLive<Payment>(lab ? `${who}|payments` : null, (onData, onError) => watchPayments(db, onData, onError));
@@ -50,6 +54,19 @@ export function useWorkspaceData() {
   );
 
   const activeReports = useMemo(() => reports.items.filter((report): report is Report => !isTombstone(report)), [reports.items]);
+
+  // A specialist also sees the old patients (no assignment yet) they have a report for; their
+  // reports query holds only their own specialty. Each is read by id: the rules allow no query.
+  const oldIds = useMemo(() => {
+    if (!specialist) return [];
+    const known = new Set(assigned.items.map(patient => patient.id));
+    return [...new Set(activeReports.map(report => report.patientId))].filter(id => !known.has(id)).sort();
+  }, [specialist, assigned.items, activeReports]);
+  const byId = usePatientsById(db, oldIds, who);
+  const patients = useMemo<Live<Patient>>(() => {
+    const old = oldIds.map(id => byId.get(id)).filter((patient): patient is Patient => Boolean(patient && isOldPatient(patient)));
+    return old.length ? { ...assigned, items: [...assigned.items, ...old] } : assigned;
+  }, [assigned, oldIds, byId]);
   const storedCatalog = catalog.items[0] ?? null;
 
   // The laboratory's first login stores the built-in list, once, as revision 1. Only when the
@@ -79,6 +96,34 @@ export function useWorkspaceData() {
 }
 
 export type WorkspaceData = ReturnType<typeof useWorkspaceData>;
+
+interface PatientsStore {
+  subscribe: (listener: () => void) => () => void;
+  getSnapshot: () => Map<string, Patient | null>;
+}
+
+/** One listener per patient id; the snapshot maps id to the patient, or null when unreadable. */
+function patientsStore(db: Firestore, ids: string[]): PatientsStore {
+  let state = new Map<string, Patient | null>();
+  return {
+    subscribe: listener => {
+      const stops = ids.map(id => watchPatient(db, id, patient => {
+        state = new Map(state).set(id, patient);
+        listener();
+      }));
+      return () => stops.forEach(stop => stop());
+    },
+    getSnapshot: () => state
+  };
+}
+
+function usePatientsById(db: Firestore, ids: string[], scope: string): Map<string, Patient | null> {
+  const key = `${scope}|${ids.join(',')}`;
+  // `key` captures everything the store depends on.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const store = useMemo(() => patientsStore(db, ids), [key]);
+  return useSyncExternalStore(store.subscribe, store.getSnapshot);
+}
 
 type StartFor = (id: string, onData: (snapshot: Snapshot<Version>) => void, onError: (error: Error) => void) => Unsubscribe;
 
