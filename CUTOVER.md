@@ -76,6 +76,11 @@ These change nothing the old app uses, so the clinic keeps working normally.
    refuses to run, because it would put the old app back.
 3. Commit everything (including `.cutover-complete`) and push.
 
+From the rebuilt app on, deploys need no announcement: an open page notices a new version
+within five minutes, or as soon as the tab is used again, and asks to be reloaded once
+its unsaved work is saved (`src/features/update`). The old app cannot do this, so this one
+switch still relies on people stopping work and reloading.
+
 ## Part 3: right after
 
 1. Open https://bioeng-c8397.web.app, reload, log in. Check the Users page.

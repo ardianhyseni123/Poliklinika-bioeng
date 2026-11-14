@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import type { Profile } from '../../auth/roles';
 import { useSession } from '../../auth/session';
+import { useData, useJournalState } from '../../data/DataProvider';
 import { sq } from '../../strings/sq';
+import { useUnsavedWork } from '../update/unsavedWork';
 import { Workspace } from '../workspace/Workspace';
 import { RefusedWrites, RescueNotice, SyncIndicator } from './SyncIndicator';
 
@@ -37,6 +39,9 @@ export function SignedInCard({ profile, children }: { profile: Pick<Profile, 'na
 }
 
 export function AppShell({ profile }: { profile: Profile }) {
+  // Changes still on their way to the server count as unsaved until they arrive.
+  const { pending } = useJournalState(useData().journal);
+  useUnsavedWork(pending.length > 0);
   return (
     <div id="appShell">
       <SignedInCard profile={profile} />

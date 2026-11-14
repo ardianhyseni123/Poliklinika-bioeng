@@ -61,6 +61,7 @@ export class Journal implements WriteTracker {
   /** Writes whose promise this page still holds; verify() leaves them to their promise. */
   private readonly live = new Set<string>();
   private work: Promise<unknown> = Promise.resolve();
+  private closed = false;
 
   private constructor(private readonly db: IDBDatabase, readonly email: string) {}
 
@@ -73,16 +74,22 @@ export class Journal implements WriteTracker {
     return journal;
   }
 
+  /**
+   * Storage operations already queued still finish (a write confirmed just before the page
+   * closes the journal is removed from storage); later ones are skipped and settled by
+   * verify() on the next load.
+   */
   close(): void {
-    this.db.close();
+    this.closed = true;
+    void this.work.then(() => this.db.close());
   }
 
   track(input: TrackInput, commit: Promise<void>): void {
     const entry: JournalEntry = { ...input, email: this.email, createdAt: new Date().toISOString(), state: 'pending' };
     this.entries.set(entry.id, entry);
     this.live.add(entry.id);
-    this.notify();
     void this.serial(() => putOne(this.db, STORE, entry));
+    this.notify();
     void commit.then(
       () => this.confirm(entry.id),
       error => this.fail(entry.id, errorCode(error))
@@ -114,8 +121,8 @@ export class Journal implements WriteTracker {
   recordFailure(input: TrackInput, error: string): void {
     const entry: JournalEntry = { ...input, email: this.email, createdAt: new Date().toISOString(), state: 'failed', error };
     this.entries.set(entry.id, entry);
-    this.notify();
     void this.serial(() => putOne(this.db, STORE, entry));
+    this.notify();
   }
 
   /** The user has seen a failed write and saved its content elsewhere. */
@@ -151,8 +158,9 @@ export class Journal implements WriteTracker {
 
   private confirm(id: string): Promise<void> {
     this.entries.delete(id);
+    const stored = this.serial(() => deleteKeys(this.db, STORE, [id]));
     this.notify();
-    return this.serial(() => deleteKeys(this.db, STORE, [id]));
+    return stored;
   }
 
   private fail(id: string, error: string): Promise<void> {
@@ -160,13 +168,16 @@ export class Journal implements WriteTracker {
     if (!entry) return Promise.resolve();
     const failed: JournalEntry = { ...entry, state: 'failed', error };
     this.entries.set(id, failed);
+    const stored = this.serial(() => putOne(this.db, STORE, failed));
     this.notify();
-    return this.serial(() => putOne(this.db, STORE, failed));
+    return stored;
   }
 
   // IndexedDB operations run one after another, so a quick confirmation cannot overtake
-  // the write that recorded the entry.
+  // the write that recorded the entry. They are queued before listeners hear of a change,
+  // so a listener that closes the journal still lets them finish.
   private serial(operation: () => Promise<void>): Promise<void> {
+    if (this.closed) return Promise.resolve();
     const next = this.work.then(operation, operation);
     this.work = next.catch(error => console.error('Write journal storage failed.', error));
     return next;

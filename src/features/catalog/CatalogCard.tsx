@@ -9,6 +9,7 @@ import type { CatalogCategory } from '../../data/schemas';
 import { diffCatalog, legacyGroupLabel, normalizeCategories, validateCatalog } from '../../domain/catalog';
 import { referenceSupportsFlag } from '../../domain/reference';
 import { formatDateTime, textRows, toText } from '../../domain/text';
+import { useUnsavedWork } from '../update/unsavedWork';
 import { useWorkspace } from '../workspace/Workspace';
 
 type Analysis = CatalogCategory['analyses'][number];
@@ -34,6 +35,8 @@ export function CatalogCard() {
   const stale = Boolean(draft && base && base.revision !== storedRevision);
   const selected = view.find(category => category.id === selectedId) ?? view[0];
   const baseIds = useMemo(() => new Set((base?.categories ?? data.categories).flatMap(c => c.analyses.map(a => a.id))), [base, data.categories]);
+
+  useUnsavedWork(changes.length > 0);
 
   // Leaving the page with unsaved changes asks first.
   useEffect(() => {

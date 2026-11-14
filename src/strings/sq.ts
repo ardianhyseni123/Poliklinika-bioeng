@@ -46,6 +46,13 @@ export const sq = {
     copy: 'Kopjo përmbajtjen',
     dismiss: 'E kam ruajtur'
   },
+  update: {
+    title: 'Ka një version të ri të programit',
+    body: 'Rifresko faqen për të vazhduar. Asgjë e ruajtur nuk humbet dhe nuk ke nevojë të hysh përsëri.',
+    reload: 'Rifresko faqen',
+    waiting: 'Ka një version të ri të programit. Ruaje punën që ke hapur; pas ruajtjes faqja do të kërkojë rifreskim.',
+    reloadNow: 'Rifresko tani (puna e paruajtur humbet)'
+  },
   rescue: {
     title: 'U rikthyen ndryshime nga versioni i vjetër',
     attachmentsTitle: 'U sollën dokumentet e versionit të vjetër',

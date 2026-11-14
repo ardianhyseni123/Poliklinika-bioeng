@@ -9,7 +9,11 @@
     "cleanUrls": true,
     "headers": [
       {
-        "source": "**/*.html",
+        "source": "/",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, max-age=0" }]
+      },
+      {
+        "source": "**/*.@(html|json)",
         "headers": [{ "key": "Cache-Control", "value": "no-cache, max-age=0" }]
       },
       {

@@ -8,6 +8,7 @@ import { ValidationError } from '../../data/context';
 import type { User } from '../../data/schemas';
 import { saveUser, warningsFor, type UserInput } from '../../data/users';
 import { formatDateTime } from '../../domain/text';
+import { useUnsavedWork } from '../update/unsavedWork';
 import { useWorkspace } from '../workspace/Workspace';
 
 const EMPTY: UserInput = { email: '', role: 'Laborator', name: '', title: '', active: true };
@@ -18,6 +19,9 @@ export function UsersCard() {
   const [form, setForm] = useState<UserInput>(EMPTY);
   const users = [...data.users.items].sort((a, b) => Number(b.active) - Number(a.active) || a.email.localeCompare(b.email));
   const editing = users.find(user => user.email === form.email.trim().toLowerCase());
+  useUnsavedWork(editing
+    ? form.role !== editing.role || form.name !== editing.name || form.title !== editing.title || form.active !== editing.active
+    : Boolean(form.email.trim() || form.name.trim() || form.title?.trim()));
 
   function edit(user: User) {
     setForm({ email: user.email, role: user.role, name: user.name, title: user.title, active: user.active });

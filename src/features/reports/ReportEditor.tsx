@@ -8,6 +8,7 @@ import { isTombstone, type AnalysisItem, type Report, type ReportSpecialty, type
 import { applyTemplate, diagnosesFor, examsFor, specialtyLabels, templatesFor, type DiagnosisTemplate } from '../../domain/specialties';
 import { formatDateTime, nowLocal } from '../../domain/text';
 import { AttachmentProblem, MAX_ATTACHMENT_BYTES, type AttachmentInfo } from '../../local/attachments';
+import { useUnsavedWork } from '../update/unsavedWork';
 import { useWorkspace } from '../workspace/Workspace';
 import { AnalysesPanel } from './AnalysesPanel';
 import { HixhamePanel, hixhameFormOf, hixhameOf, type HixhameForm } from './HixhamePanel';
@@ -120,6 +121,9 @@ function ReportForm() {
   const [form, setForm] = useState<FormState>(() => initialForm(editor.report, actor.role));
   const [staged, setStaged] = useState<File[]>([]);
   const [saved, setSaved] = useState<AttachmentInfo[]>([]);
+  // The form as opened or last saved; anything else is typed work that a reload would lose.
+  const [savedForm, setSavedForm] = useState(form);
+  useUnsavedWork(staged.length > 0 || JSON.stringify(form) !== JSON.stringify(savedForm));
   const base = editor.report;
   const patient = data.patients.items.find(item => item.id === patientId) ?? null;
 
@@ -203,6 +207,7 @@ function ReportForm() {
       setStaged([]);
       setSaved(await attachments.list(head.id));
       rebaseEditor(head);
+      setSavedForm(form);
       say(`Raporti u ruajt si rekord i veçantë (versioni ${head.revision}).${changedElsewhere ? ' Versioni tjetër u ruajt gjithashtu: zgjidhe te lista e raporteve.' : ''}`);
     } catch (error) {
       console.error(error);

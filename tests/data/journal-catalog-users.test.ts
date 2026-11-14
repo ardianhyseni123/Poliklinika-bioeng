@@ -26,6 +26,27 @@ describe('write journal', () => {
     expect(journal.failed()).toHaveLength(0);
   });
 
+  test('closing right after a write is confirmed still clears it from storage', async () => {
+    // The page can close the journal the moment a write arrives (a new app version does so).
+    const journal = await Journal.open(`lab-${uniqueSuffix()}@bioeng.test`);
+    let arrive = () => undefined as void;
+    const commit = new Promise<void>(resolve => { arrive = resolve; });
+    journal.track({ id: 'w', label: 'patient', check: { path: 'patients/x', expect: 'exists' }, content: {} }, commit);
+    await journal.flushed();
+    const closedRightAway = new Promise<void>(resolve => {
+      journal.subscribe(() => {
+        if (journal.pending().length === 0) {
+          journal.close();
+          resolve();
+        }
+      });
+    });
+    arrive();
+    await closedRightAway;
+    await journal.flushed();
+    expect((await Journal.open(journal.email)).pending()).toHaveLength(0);
+  });
+
   test('a write the server refuses is kept, with its content, as failed', async () => {
     const journal = await Journal.open(`inactive-${uniqueSuffix()}@bioeng.test`);
     const { done } = createPatient(device(env, 'inactive', journal), NEW_PATIENT);

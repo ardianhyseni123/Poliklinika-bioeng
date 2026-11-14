@@ -7,6 +7,7 @@ import { APPOINTMENT_STATUSES, type Appointment } from '../../data/schemas';
 import { patientSpecialties } from '../../domain/assignment';
 import { nowLocal, showDateTime } from '../../domain/text';
 import { patientOptionLabel, workingList } from '../patients/PatientsCard';
+import { useUnsavedWork } from '../update/unsavedWork';
 import { useWorkspace } from '../workspace/Workspace';
 
 const SPECIALTIES = ['Laborator', ...SPECIALIST_SPECIALTIES] as const;
@@ -18,6 +19,7 @@ export function AppointmentsCard() {
   const { ctx } = useData();
   const { data, patientId, say } = useWorkspace();
   const [form, setForm] = useState(() => ({ ...emptyForm(), patientId }));
+  useUnsavedWork(Boolean(form.clinician.trim() || form.phone.trim() || form.note.trim()));
   const [now, setNow] = useState(() => Date.now());
   const expiring = useRef(new Set<string>());
   const patients = useMemo(() => workingList(data.patients.items), [data.patients.items]);

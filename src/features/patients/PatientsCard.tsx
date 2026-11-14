@@ -6,6 +6,7 @@ import { assignPatient, createPatient, patientName, setPatientArchived } from '.
 import type { Patient } from '../../data/schemas';
 import { assignmentSummary, isOldPatient, patientSpecialties } from '../../domain/assignment';
 import { normalizeSearch } from '../../domain/text';
+import { useUnsavedWork } from '../update/unsavedWork';
 import { useWorkspace } from '../workspace/Workspace';
 
 const EMPTY_FORM = { firstName: '', lastName: '', dob: '', gender: '', phone: '', address: '' };
@@ -44,6 +45,7 @@ function AssignPanel({ patient, current }: { patient: Patient | null; current: s
   const { ctx } = useData();
   const { say } = useWorkspace();
   const [chosen, setChosen] = useState(current);
+  useUnsavedWork([...chosen].sort().join() !== [...current].sort().join());
 
   function save() {
     if (!patient) {
@@ -81,6 +83,7 @@ export function PatientsCard() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [formOpen, setFormOpen] = useState(false);
   const [newSpecialties, setNewSpecialties] = useState<string[]>([]);
+  useUnsavedWork(newSpecialties.length > 0 || JSON.stringify(form) !== JSON.stringify(EMPTY_FORM));
   const assigns = can(ctx.actor, 'patients.assign');
 
   const all = useMemo(() => workingList(data.patients.items), [data.patients.items]);

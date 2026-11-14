@@ -1,8 +1,34 @@
 import { defineConfig } from 'vitest/config';
+import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
+// Every build gets its own id, compiled into the app and published as /version.json. A
+// running page compares the two to notice that another version has been deployed and asks
+// for a reload (src/features/update). firebase.next.json serves `/` and /version.json
+// uncached, so that check and the reload always reach the current deployment.
+const BUILD_ID = new Date().toISOString();
+
+function versionFile(): Plugin {
+  const body = `${JSON.stringify({ version: BUILD_ID })}\n`;
+  return {
+    name: 'bioeng-version-file',
+    // `vite` (dev and the end-to-end tests) answers with the id of the running server.
+    configureServer(server) {
+      server.middlewares.use('/version.json', (_request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        response.setHeader('Cache-Control', 'no-store');
+        response.end(body);
+      });
+    },
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'version.json', source: body });
+    }
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), versionFile()],
+  define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
   // The old app in docs/ keeps being served until cutover; the new one builds to dist/.
   publicDir: 'public',
   build: {

@@ -5,6 +5,7 @@ import { patientName } from '../../data/patients';
 import { createPayment } from '../../data/payments';
 import { financeSummary, paymentProblem, paymentSummaries, reportPaymentLabel, type Totals } from '../../domain/payments';
 import { dateOnly, euro, moneyValue } from '../../domain/text';
+import { useUnsavedWork } from '../update/unsavedWork';
 import { useWorkspace } from '../workspace/Workspace';
 
 const statusLabel = (status: 'PAID' | 'UNPAID') => (status === 'PAID' ? 'E paguar' : 'E pa paguar');
@@ -26,6 +27,8 @@ export function PaymentsCard() {
 
   const [reportId, setReportId] = useState('');
   const [form, setForm] = useState({ total: '', amount: '', status: 'PAID' as 'PAID' | 'UNPAID', date: dateOnly(), note: '' });
+  // The total comes from the chosen report; what someone types is the amount and the note.
+  useUnsavedWork(Boolean(form.amount.trim() || form.note.trim()));
   // Default to the report open in the editor when it belongs to this patient.
   const chosenId = reports.some(report => report.id === reportId)
     ? reportId
